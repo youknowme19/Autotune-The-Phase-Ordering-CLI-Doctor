@@ -10,6 +10,10 @@ jobs:
   test:
     name: Test (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_ENV_HINTS: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -29,12 +33,12 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm
+          sudo apt-get install -y clang llvm llvm-dev
 
       - name: Install LLVM / Clang (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install llvm
+          which clang || brew install llvm
 
       - name: Install Autotune package
         run: |
