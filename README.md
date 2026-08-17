@@ -6,81 +6,74 @@
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)](docs/benchmarking.md)
 [![CI/CD Pipeline](https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor/actions/workflows/ci.yml)
 
-**Autotune** is an AI-guided compiler optimization and phase-ordering doctor for C/C++ workloads. It discovers code-specific LLVM optimization pass sequences that outperform standard compiler optimization pipelines (such as `-O3`), verifies program correctness against trusted baselines under isolated execution, measures performance with empirical statistical hygiene, and generates reproducible compiler prescriptions.
+Autotune is an AI-guided compiler optimization system and phase-ordering doctor for C/C++ workloads. It discovers code-specific LLVM optimization pass sequences that outperform standard compiler optimization flags (such as `-O3`), verifies program correctness against trusted baselines under isolated execution, measures performance with empirical statistical hygiene, and generates reproducible compiler prescriptions.
 
 ---
 
-## The Problem: Compiler Phase Ordering
+## Overview and Background
 
-Standard compiler optimization flags like `-O3` apply a fixed, fixed-order sequence of generic optimization passes to every function regardless of its unique structure.
+### The Compiler Phase-Ordering Problem
 
-However, compiler passes interact dynamically:
-- Running `licm` (Loop Invariant Code Motion) before `loop-unroll` can unlock vectorization opportunities that `-O3` misses.
-- Running `gvn` (Global Value Numbering) after `instcombine` might eliminate redundant memory loads in compute-heavy kernels.
-- The order and choice of passes (the **phase-ordering problem**) creates a massive search space where code-specific pass pipelines can achieve **15% to 40%+ performance gains** over standard `-O3`.
+Standard compiler optimization flags like `-O3` apply a fixed, general-purpose sequence of optimization passes to every source file regardless of its specific code structure.
 
-**Autotune** automates the discovery of these optimal pass pipelines using LLM structural analysis and Genetic Algorithms without sacrificing program correctness or relying on unverified claims.
+However, compiler optimization passes interact dynamically:
+- Running `licm` (Loop Invariant Code Motion) before `loop-unroll` can expose vectorization opportunities that standard `-O3` pipelines miss.
+- Running `gvn` (Global Value Numbering) after `instcombine` can eliminate redundant memory loads in compute-dense inner loops.
+- The selection, order, and repetition of passes (the compiler phase-ordering problem) creates a combinatorial search space where workload-specific pass pipelines can yield significant performance improvements over default compiler pipelines.
 
----
-
-## Core Philosophy
-
-> **"Never recommend an optimization merely because an AI says it might be faster. Compile it, execute it, verify correctness, and measure it first."**
-
-Autotune enforces empirical validation at every step:
-1. **Zero Hallucinated Passes**: Proposed LLVM passes are validated against the local toolchain before compilation.
-2. **Strict Correctness First**: Candidates that produce fast but incorrect output are discarded immediately.
-3. **No Fake Hardware Metrics**: On macOS, Autotune uses high-precision CPU timing with statistical noise calculation, explicitly signaling `[WARN] E-01` rather than reporting fake cycle counts.
+Autotune automates the discovery of optimal LLVM pass pipelines using Clang AST structural analysis, LLM pass proposal seeding, and Genetic Algorithm search, backed by strict sandboxed execution and correctness gating.
 
 ---
 
-## Key Features
+## Core Engineering Philosophy
 
-- ** Environment & Toolchain Doctor (`autotune doctor`)**: Validates local Python 3.11+, Clang, LLVM `opt`, operating system, CPU architecture, and measurement capabilities.
-- **🔬 Code Feature Extraction**: Analyzes C/C++ AST structure (loops, memory access patterns, compute density) and extracts compact JSON features to prompt the LLM safely without raw code dumps.
-- ** LLM Pass Pipeline Seeding**: Generates domain-tailored initial pass sequences using LLM intelligence, validated against local LLVM capabilities.
-- ** Deterministic Genetic Algorithm Search**: Mutates (insert, delete, swap) and crosses over (2-point crossover) pass pipelines with reproducible random seeding (`--seed 42`).
-- ** Isolated Sandbox Execution**: Runs candidate binaries in isolated process groups (`start_new_session=True`) with strict timeouts and `SIGKILL` cleanup.
-- ** Ground-Truth Correctness Validator**: Compares candidate stdout/stderr and exit codes against trusted `-O3` baseline runs to reject divergent outputs.
-- ** Cross-Platform Performance Runners**: Platform-specific backends (`MacOSPerformanceRunner` and `LinuxPerformanceRunner`) with statistical sampling (median, stddev, relative noise ratio).
-- ** Reproducible Compiler Prescriptions**: Generates exact, copy-pasteable `clang` and `opt` compilation commands for production integration.
+> "Never recommend an optimization merely because an AI says it might be faster. Compile it, execute it, verify correctness, and measure it first."
+
+Autotune enforces rigorous empirical validation:
+
+1. Zero Hallucinated Passes: Proposed LLVM passes are validated against the local toolchain before compilation. Invalid pass names are filtered out automatically.
+2. Strict Correctness First: Candidates that produce fast but incorrect output (diverging stdout, stderr, or exit code) are assigned infinite cost (`float('inf')`) and discarded.
+3. Transparent Performance Metrics: On macOS, Autotune uses high-precision CPU monotonic timing with statistical noise and IQR calculations, explicitly signaling warning code `E-01` rather than outputting simulated cycle metrics.
 
 ---
 
-##  System Architecture
+## System Architecture
 
 ```text
                C/C++ Source Code
                       │
                       ▼
-        [ AST & Feature Extractor ]
+        [ AST & Feature Extractor ]  (Clang -ast-dump=json)
                       │
                       ▼ (Compact Structural JSON)
               [ LLM Client ]
                       │
                       ▼ (Proposed Pass Pipelines)
-           [ LLVM Pass Validator ] ◄── Rejects Hallucinated Passes
+           [ LLVM Pass Validator ]  (Rejects Hallucinated Passes)
                       │
                       ▼
-         [ Genetic Algorithm Engine ] ◄── Selection, Crossover, Mutators
+         [ Genetic Algorithm Engine ]  (Selection, Crossover, Mutators)
                       │
                       ▼
-          [ Compiler Driver (clang/opt) ]
+       [ 3-Step LLVM Compiler Driver ]
+         1. clang -O0 -Xclang -disable-O0-optnone -emit-llvm -c source.c -o raw.bc
+         2. opt -passes="pass1,pass2" raw.bc -o opt.bc
+         3. clang -arch arm64 opt.bc -o candidate.bin
                       │
-                      ▼ (Candidate Binary)
+                      ▼ (Candidate Executable)
              [ Sandbox Executor ]
                       │
              ┌────────┴────────┐
              ▼                 ▼
    [Correctness Validator] [Performance Runner]
-   (Must match -O3 output) (Statistical Sampling & Noise)
+   (Must match -O3 output) (3 Warmups, Median & IQR Noise)
              │                 │
              └────────┬────────┘
                       ▼
-          [ Reproducible Prescription ]
+        [ Reproducible Prescription & JSON Report ]
 ```
 
-### Repository Structure
+### Module Structure
 
 ```text
 autotune/
@@ -92,32 +85,48 @@ autotune/
 │   ├── sandbox/       # Subprocess executor with process group isolation & timeouts
 │   ├── llm/           # Provider-agnostic LLM interface & structured schema
 │   ├── search/        # Genetic Algorithm engine, fitness ordering, & mutators
-│   ├── reporting/     # Compiler prescription builder & report renderer
+│   ├── reporting/     # Compiler prescription builder & JSON report exporter
 │   ├── ui/            # Rich terminal dashboard formatting
 │   └── cli.py         # Typer CLI application entry point
 ├── tests/
-│   ├── unit/          # Tests for pass logic, GA, correctness, & config
-│   └── integration/   # Tests for compilation drivers & CLI commands
-├── examples/          # Sample C benchmark kernels (simple_loop, vector_sum)
-└── docs/              # Deep-dive architecture & benchmarking specifications
+│   ├── unit/          # Tests for passes, GA, AST, LLM, correctness, & config
+│   └── integration/   # Tests for compiler drivers & CLI commands
+├── examples/          # Sample benchmark kernels (simple_loop, vector_sum, sha256, matrix_mult)
+└── docs/              # Technical architecture & benchmarking specifications
 ```
 
 ---
 
-##  Quick Start
+## Key Features
+
+- Environment and Toolchain Doctor (`autotune doctor`): Validates local Python 3.11+, Clang, LLVM `opt`, operating system, CPU architecture, and measurement capabilities.
+- AST Feature Extraction: Parses C/C++ AST structure using `clang -Xclang -ast-dump=json` (loops, operations, array indexing, function calls) and extracts compact JSON summaries.
+- LLM Pass Pipeline Seeding: Generates workload-tailored initial pass sequences using LLM intelligence, validated against local LLVM capabilities.
+- Pass Validation Gate: Intercepts raw LLM proposals and filters out hallucinated pass names before seeding the GA population.
+- Deterministic Genetic Algorithm Search: Mutates (insert, delete, swap) and crosses over (2-point crossover) pass pipelines with reproducible random seeding (`--seed 42`).
+- Early Stopping and Stopping Criteria: Supports generation limits, fitness plateau detection (`max_stagnant_generations`), and search timeout limits.
+- Isolated Sandbox Execution: Runs candidate binaries in isolated process groups (`start_new_session=True`) with strict timeouts and `SIGKILL` cleanup.
+- Ground-Truth Correctness Validator: Compares candidate stdout, stderr, and exit codes against trusted `-O3` baseline runs to reject divergent outputs.
+- Cross-Platform Performance Runners: Platform-specific backends (`MacOSPerformanceRunner` and `LinuxPerformanceRunner`) with 3 warmup runs and statistical sampling (median, stddev, IQR noise ratio).
+- Reproducible Compiler Prescriptions: Generates exact, copy-pasteable `clang` and `opt` compilation commands for production integration.
+- Structured JSON Report Exporter: Exports full execution metadata, doctor details, baseline performance metrics, and timing sample arrays.
+
+---
+
+## Installation
 
 ### Prerequisites
 
-- **macOS** (Apple Silicon or Intel) or **Linux**
-- **Python 3.11+**
-- **LLVM / Clang** toolchain (`clang` and `opt`)
+- macOS (Apple Silicon or Intel) or Linux
+- Python 3.11+
+- LLVM / Clang toolchain (`clang` and `opt`)
 
 On macOS via Homebrew:
 ```bash
 brew install llvm python@3.11
 ```
 
-### Installation
+### Installation Steps
 
 ```bash
 # Clone the repository
@@ -132,7 +141,7 @@ pip install -e ".[dev]"
 
 ---
 
-##  CLI Commands & Usage
+## CLI Usage and Commands
 
 ### 1. Toolchain Health Check (`autotune doctor`)
 
@@ -142,7 +151,7 @@ Inspects local compiler binaries, LLVM toolchain, and measurement capabilities:
 autotune doctor
 ```
 
-**Example Output:**
+Output format:
 ```text
 Autotune v0.1.0
 Phase-Ordering CLI Doctor
@@ -174,7 +183,7 @@ autotune diagnose ./examples/simple_loop/kernel.c \
     --workload ./examples/simple_loop/input.txt
 ```
 
-**Example Output:**
+Output format:
 ```text
 Autotune v0.1.0
 Phase-Ordering CLI Doctor
@@ -201,35 +210,41 @@ Status: READY FOR SEARCH
 
 ---
 
-### 3. AI & Genetic Optimization Search (`autotune search`)
+### 3. AI and Genetic Optimization Search (`autotune search`)
 
-Runs the full AI-seeded Genetic Algorithm optimization loop over multiple generations:
+Runs the full AI-seeded Genetic Algorithm optimization loop over multiple generations with live terminal UI progress:
 
 ```bash
 autotune search ./examples/simple_loop/kernel.c \
     --workload ./examples/simple_loop/input.txt \
     --generations 10 \
     --population 20 \
-    --seed 42
+    --seed 42 \
+    --output-json report.json
 ```
 
-**Example Output:**
+Output format:
 ```text
 Starting optimization search on ./examples/simple_loop/kernel.c...
 
 Optimization Search Complete!
 Best Pass Sequence: ['mem2reg', 'sroa', 'early-cse', 'gvn', 'loop-vectorize', 'slp-vectorize']
-Speedup: 1.28x
+Speedup: 1.28x (21.9% improvement over -O3)
 
-Reproducible Command:
+Baseline (-O3):   3.667 ms
+Candidate Best:   2.864 ms
+
+Reproducible Compiler Command:
 /usr/bin/clang -O0 -Xclang -disable-O0-optnone -emit-llvm -S ./examples/simple_loop/kernel.c -o - | /opt/homebrew/opt/llvm/bin/opt -passes='mem2reg,sroa,early-cse,gvn,loop-vectorize,slp-vectorize' -S -o - | /usr/bin/clang -x assembler - -o optimized_kernel.bin
+
+Report exported to report.json
 ```
 
 ---
 
 ### 4. Direct Binary Benchmarking (`autotune benchmark`)
 
-Measures an arbitrary executable binary directly across multiple iterations:
+Measures an arbitrary executable binary directly across multiple iterations with warmup runs:
 
 ```bash
 autotune benchmark ./path/to/binary --workload ./input.txt --repetitions 20
@@ -247,9 +262,56 @@ autotune validate ./examples/simple_loop/kernel.c ./path/to/candidate.bin --work
 
 ---
 
-##  Testing
+## JSON Report Schema
 
-Autotune includes a comprehensive suite of unit and integration tests:
+When running `autotune search --output-json report.json`, Autotune exports a structured diagnostic document:
+
+```json
+{
+  "timestamp": "2026-08-17T23:42:00.780202",
+  "source_path": "./examples/sha256/kernel.c",
+  "workload_path": "./examples/sha256/input.txt",
+  "doctor_report": {
+    "python_version": "3.11.15",
+    "python_ok": true,
+    "os_name": "Darwin",
+    "arch": "arm64",
+    "cpu_info": "Apple Silicon (ARM64)",
+    "clang_path": "/usr/bin/clang",
+    "opt_path": "/opt/homebrew/opt/llvm/bin/opt",
+    "measurement_backend": "macOS high-precision timing"
+  },
+  "baseline_result": {
+    "success": true,
+    "metrics": {
+      "median_time_ns": 3666500.0,
+      "mean_time_ns": 3680041.6,
+      "stddev_time_ns": 565337.45,
+      "noise_ratio": 0.154,
+      "iqr_time_ns": 772322.75,
+      "iqr_noise_ratio": 0.210
+    }
+  },
+  "prescription": {
+    "pass_sequence": {
+      "passes": ["mem2reg", "loop-reduce", "simplifycfg", "sccp", "dce", "memcpyopt", "gvn"]
+    },
+    "reproducible_clang_command": "/usr/bin/clang -O0 -Xclang -disable-O0-optnone -emit-llvm -S ./examples/sha256/kernel.c -o - | /opt/homebrew/opt/llvm/bin/opt -passes='mem2reg,loop-reduce,simplifycfg,sccp,dce,memcpyopt,gvn' -S -o - | /usr/bin/clang -x assembler - -o optimized_kernel.bin",
+    "baseline_time_ms": 3.667,
+    "candidate_time_ms": 4.67,
+    "speedup_ratio": 0.79
+  },
+  "generations_searched": 5,
+  "population_size": 10,
+  "seed": 42
+}
+```
+
+---
+
+## Testing and Verification
+
+Autotune includes a unit and integration test suite:
 
 ```bash
 # Run all tests
@@ -264,17 +326,19 @@ pytest -v tests/integration/
 
 ---
 
-## Platform Capabilities & Notes
+## Platform Capabilities and Technical Notes
 
-| Feature / Platform | macOS (Apple Silicon M4) | Linux (x86_64 / ARM64) |
+| Feature / Capability | macOS (Apple Silicon M4) | Linux (x86_64 / ARM64) |
 | :--- | :--- | :--- |
-| **Compiler Driver** | Apple Clang / Homebrew LLVM | Native Clang / LLVM |
-| **Measurement Backend** | Monotonic CPU Timing (`time.perf_counter_ns`) | `perf_event_open` Hardware Counters |
-| **Diagnostic Notice** | Transparent `[WARN] E-01` | Native Counter Metrics |
-| **Process Isolation** | Process Group Isolation (`start_new_session`) | Namespaces & Process Groups |
+| Compiler Driver | Apple Clang / Homebrew LLVM | Native Clang / LLVM |
+| Measurement Backend | Monotonic CPU Timing (`time.perf_counter_ns`) | Linux Timing / `perf_event_open` |
+| Diagnostic Code | Transparent Warning `E-01` | Native Linux Backend |
+| Process Isolation | Process Group Sandbox (`start_new_session`) | Namespaces & Process Groups |
+| Warmup Runs | 3 Warmup Iterations | 3 Warmup Iterations |
+| Statistical Noise | Standard Deviation & IQR Noise | Standard Deviation & IQR Noise |
 
 ---
 
 ## License
 
-Distributed under the **Apache 2.0 License**. See [`LICENSE`](LICENSE) for details.
+Distributed under the Apache 2.0 License. See `LICENSE` for details.
