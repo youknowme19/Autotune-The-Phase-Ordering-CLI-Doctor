@@ -1,0 +1,60 @@
+name: Standalone Executable Binaries Build
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+jobs:
+  build-binaries:
+    name: Build Binary (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: macos-arm64
+            binary_name: autotune-macos-arm64
+          - os: ubuntu-latest
+            target: linux-x86_64
+            binary_name: autotune-linux-x86_64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies and PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install pyinstaller
+
+      - name: Build standalone executable with PyInstaller
+        run: |
+          pyinstaller --onefile \
+                      --name=${{ matrix.binary_name }} \
+                      --clean \
+                      src/autotune/cli.py
+
+      - name: Test standalone binary execution
+        run: |
+          ./dist/${{ matrix.binary_name }} doctor
+
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary_name }}
+          path: dist/${{ matrix.binary_name }}
+
+      - name: Upload Binary to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: dist/${{ matrix.binary_name }}
