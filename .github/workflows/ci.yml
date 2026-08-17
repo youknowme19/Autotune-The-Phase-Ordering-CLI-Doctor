@@ -1,0 +1,54 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install LLVM / Clang (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm
+
+      - name: Install LLVM / Clang (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm
+
+      - name: Install Autotune package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run Toolchain Doctor Check
+        run: |
+          autotune doctor
+
+      - name: Run Pytest Suite with Coverage
+        run: |
+          pytest -v --cov=src/autotune --cov-report=term-missing
+
+      - name: Run Baseline Diagnosis Verification
+        run: |
+          autotune diagnose ./examples/simple_loop/kernel.c --workload ./examples/simple_loop/input.txt

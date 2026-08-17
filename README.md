@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11%2B-green.svg)](https://www.python.org/)
 [![LLVM](https://img.shields.io/badge/LLVM-15%2B-orange.svg)](https://llvm.org/)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)](docs/benchmarking.md)
-[![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen.svg)](tests/)
+[![CI/CD Pipeline](https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor/actions/workflows/ci.yml)
 
 **Autotune** is an AI-guided compiler optimization and phase-ordering doctor for C/C++ workloads. It discovers code-specific LLVM optimization pass sequences that outperform standard compiler optimization pipelines (such as `-O3`), verifies program correctness against trusted baselines under isolated execution, measures performance with empirical statistical hygiene, and generates reproducible compiler prescriptions.
 
