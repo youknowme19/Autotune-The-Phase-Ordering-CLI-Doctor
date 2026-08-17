@@ -48,6 +48,12 @@ class PassSequence(BaseModel):
 
     passes: List[str] = Field(default_factory=list)
 
+    def to_opt_string(self) -> str:
+        """Format pass sequence as comma-separated string for opt -passes="..."."""
+        if not self.passes:
+            return "mem2reg"
+        return ",".join(self.passes)
+
     def insert(self, pass_name: str, index: Optional[int] = None) -> "PassSequence":
         new_passes = list(self.passes)
         if index is None or index < 0 or index > len(new_passes):
@@ -80,6 +86,11 @@ class PassSequence(BaseModel):
 
         child_passes = self.passes[:p1] + other.passes[p1:p2] + self.passes[p2:]
         return PassSequence(passes=child_passes)
+
+    def validate(self, validator: Optional["PassValidator"] = None) -> bool:
+        """Validate if all passes in sequence are valid."""
+        v = validator or PassValidator()
+        return v.validate_sequence(self)
 
     def serialize(self) -> str:
         return json.dumps(self.passes)

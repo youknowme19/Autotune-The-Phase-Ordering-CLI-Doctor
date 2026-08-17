@@ -12,17 +12,12 @@ class PipelineBuilder:
     @staticmethod
     def to_opt_passes_arg(sequence: PassSequence) -> str:
         """Convert pass sequence to modern LLVM opt `-passes=...` string."""
-        if not sequence.passes:
-            return "default<O0>"
-        # Wrap passes into module/function pass pipeline string
-        joined = ",".join(sequence.passes)
-        return f"function({joined})"
+        return sequence.to_opt_string()
 
     @staticmethod
     def to_clang_flags(sequence: PassSequence) -> List[str]:
         """Convert pass sequence to clang optimization flags."""
         if not sequence.passes:
             return ["-O0"]
-        pipeline_str = ",".join(sequence.passes)
-        # Use LLVM opaque pipeline flag for clang
+        pipeline_str = sequence.to_opt_string()
         return ["-O2", f"-fplugin-arg-opt=-passes={pipeline_str}"]
