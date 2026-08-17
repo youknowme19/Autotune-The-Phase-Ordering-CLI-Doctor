@@ -3,7 +3,7 @@ requires = ["flit_core >=3.8.0,<5"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = "autotune"
+name = "autotune-doctor"
 version = "0.1.0"
 description = "AI-guided compiler optimization and LLVM phase-ordering doctor for C/C++ workloads"
 readme = "README.md"
@@ -43,6 +43,9 @@ dev = [
 
 [project.scripts]
 autotune = "autotune.cli:app"
+
+[tool.flit.module]
+name = "autotune"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

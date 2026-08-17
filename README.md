@@ -1,12 +1,63 @@
 # Autotune — Phase-Ordering CLI Doctor
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![PyPI Package](https://img.shields.io/badge/PyPI-autotune--doctor-blue.svg)](https://pypi.org/project/autotune-doctor/)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-green.svg)](https://www.python.org/)
 [![LLVM](https://img.shields.io/badge/LLVM-15%2B-orange.svg)](https://llvm.org/)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)](docs/benchmarking.md)
 [![CI/CD Pipeline](https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor/actions/workflows/ci.yml)
 
 Autotune is an AI-guided compiler optimization system and phase-ordering doctor for C/C++ workloads. It discovers code-specific LLVM optimization pass sequences that outperform standard compiler optimization flags (such as `-O3`), verifies program correctness against trusted baselines under isolated execution, measures performance with empirical statistical hygiene, and generates reproducible compiler prescriptions.
+
+---
+
+## Installation Methods
+
+### Method 1: PyPI Package (Universal Python Installation)
+
+Install via `pip`, `uv`, or `pipx`:
+
+```bash
+pip install autotune-doctor
+
+# Or isolated via uv tool / pipx
+uv tool install autotune-doctor
+# or
+pipx install autotune-doctor
+```
+
+---
+
+### Method 2: Standalone Executable Binary (No Python Required)
+
+Download pre-compiled zero-dependency binaries directly from GitHub Releases:
+
+#### macOS Apple Silicon (ARM64)
+```bash
+curl -LO https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor/releases/download/v0.1.0/autotune-macos-arm64
+chmod +x autotune-macos-arm64
+sudo mv autotune-macos-arm64 /usr/local/bin/autotune
+```
+
+#### Linux (x86_64)
+```bash
+curl -LO https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor/releases/download/v0.1.0/autotune-linux-x86_64
+chmod +x autotune-linux-x86_64
+sudo mv autotune-linux-x86_64 /usr/local/bin/autotune
+```
+
+---
+
+### Method 3: From Source
+
+```bash
+git clone https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor.git
+cd Autotune-The-Phase-Ordering-CLI-Doctor
+
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
 
 ---
 
@@ -73,72 +124,6 @@ Autotune enforces rigorous empirical validation:
         [ Reproducible Prescription & JSON Report ]
 ```
 
-### Module Structure
-
-```text
-autotune/
-├── src/autotune/
-│   ├── analysis/      # C/C++ AST parser & compact JSON feature extraction
-│   ├── doctor/        # System diagnostic checks & error codes (E-01 to E-05)
-│   ├── llvm/          # Clang/Opt compiler driver, PassSequence, & validation
-│   ├── benchmark/     # MacOS & Linux performance runners & correctness checking
-│   ├── sandbox/       # Subprocess executor with process group isolation & timeouts
-│   ├── llm/           # Provider-agnostic LLM interface & structured schema
-│   ├── search/        # Genetic Algorithm engine, fitness ordering, & mutators
-│   ├── reporting/     # Compiler prescription builder & JSON report exporter
-│   ├── ui/            # Rich terminal dashboard formatting
-│   └── cli.py         # Typer CLI application entry point
-├── tests/
-│   ├── unit/          # Tests for passes, GA, AST, LLM, correctness, & config
-│   └── integration/   # Tests for compiler drivers & CLI commands
-├── examples/          # Sample benchmark kernels (simple_loop, vector_sum, sha256, matrix_mult)
-└── docs/              # Technical architecture & benchmarking specifications
-```
-
----
-
-## Key Features
-
-- Environment and Toolchain Doctor (`autotune doctor`): Validates local Python 3.11+, Clang, LLVM `opt`, operating system, CPU architecture, and measurement capabilities.
-- AST Feature Extraction: Parses C/C++ AST structure using `clang -Xclang -ast-dump=json` (loops, operations, array indexing, function calls) and extracts compact JSON summaries.
-- LLM Pass Pipeline Seeding: Generates workload-tailored initial pass sequences using LLM intelligence, validated against local LLVM capabilities.
-- Pass Validation Gate: Intercepts raw LLM proposals and filters out hallucinated pass names before seeding the GA population.
-- Deterministic Genetic Algorithm Search: Mutates (insert, delete, swap) and crosses over (2-point crossover) pass pipelines with reproducible random seeding (`--seed 42`).
-- Early Stopping and Stopping Criteria: Supports generation limits, fitness plateau detection (`max_stagnant_generations`), and search timeout limits.
-- Isolated Sandbox Execution: Runs candidate binaries in isolated process groups (`start_new_session=True`) with strict timeouts and `SIGKILL` cleanup.
-- Ground-Truth Correctness Validator: Compares candidate stdout, stderr, and exit codes against trusted `-O3` baseline runs to reject divergent outputs.
-- Cross-Platform Performance Runners: Platform-specific backends (`MacOSPerformanceRunner` and `LinuxPerformanceRunner`) with 3 warmup runs and statistical sampling (median, stddev, IQR noise ratio).
-- Reproducible Compiler Prescriptions: Generates exact, copy-pasteable `clang` and `opt` compilation commands for production integration.
-- Structured JSON Report Exporter: Exports full execution metadata, doctor details, baseline performance metrics, and timing sample arrays.
-
----
-
-## Installation
-
-### Prerequisites
-
-- macOS (Apple Silicon or Intel) or Linux
-- Python 3.11+
-- LLVM / Clang toolchain (`clang` and `opt`)
-
-On macOS via Homebrew:
-```bash
-brew install llvm python@3.11
-```
-
-### Installation Steps
-
-```bash
-# Clone the repository
-git clone https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor.git
-cd Autotune-The-Phase-Ordering-CLI-Doctor
-
-# Create virtual environment and install autotune
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-```
-
 ---
 
 ## CLI Usage and Commands
@@ -151,27 +136,6 @@ Inspects local compiler binaries, LLVM toolchain, and measurement capabilities:
 autotune doctor
 ```
 
-Output format:
-```text
-Autotune v0.1.0
-Phase-Ordering CLI Doctor
-
-                         System & Toolchain Diagnostics                         
-┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Check Component     ┃ Status ┃ Details                                       ┃
-┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Python Version      │ [OK]   │ 3.11.15                                       │
-│ OS & Architecture   │ [OK]   │ Darwin (arm64 - Apple Silicon (ARM64))        │
-│ Clang Compiler      │ [OK]   │ /usr/bin/clang (Apple clang version 21.0.0)   │
-│ LLVM Opt Binary     │ [OK]   │ /opt/homebrew/opt/llvm/bin/opt (LLVM 22.1.8) │
-│ Measurement Backend │ [OK]   │ macOS high-precision timing                   │
-└─────────────────────┴────────┴───────────────────────────────────────────────┘
-
-[WARN] E-01
-Hardware performance counters are not available through the Linux backend on macOS.
-Using macOS timing backend for development.
-```
-
 ---
 
 ### 2. Baseline Performance Diagnosis (`autotune diagnose`)
@@ -181,31 +145,6 @@ Establishes `-O3` baseline performance, verifies execution correctness, and prep
 ```bash
 autotune diagnose ./examples/simple_loop/kernel.c \
     --workload ./examples/simple_loop/input.txt
-```
-
-Output format:
-```text
-Autotune v0.1.0
-Phase-Ordering CLI Doctor
-
-[OK] Source detected
-[OK] Compiler detected
-[OK] LLVM toolchain detected
-[OK] Baseline compiled
-[OK] Benchmark executed
-[OK] Correctness verified
-
-Baseline
-────────────────────────
-Compiler:     /usr/bin/clang
-Optimization: -O3
-Target:       arm64
-Measurement:  macOS high-precision timing
-Median Time:  3.312 ms (noise: 1.21%)
-
-Result
-────────────────────────
-Status: READY FOR SEARCH
 ```
 
 ---
@@ -221,23 +160,6 @@ autotune search ./examples/simple_loop/kernel.c \
     --population 20 \
     --seed 42 \
     --output-json report.json
-```
-
-Output format:
-```text
-Starting optimization search on ./examples/simple_loop/kernel.c...
-
-Optimization Search Complete!
-Best Pass Sequence: ['mem2reg', 'sroa', 'early-cse', 'gvn', 'loop-vectorize', 'slp-vectorize']
-Speedup: 1.28x (21.9% improvement over -O3)
-
-Baseline (-O3):   3.667 ms
-Candidate Best:   2.864 ms
-
-Reproducible Compiler Command:
-/usr/bin/clang -O0 -Xclang -disable-O0-optnone -emit-llvm -S ./examples/simple_loop/kernel.c -o - | /opt/homebrew/opt/llvm/bin/opt -passes='mem2reg,sroa,early-cse,gvn,loop-vectorize,slp-vectorize' -S -o - | /usr/bin/clang -x assembler - -o optimized_kernel.bin
-
-Report exported to report.json
 ```
 
 ---
@@ -316,26 +238,7 @@ Autotune includes a unit and integration test suite:
 ```bash
 # Run all tests
 pytest -v
-
-# Run unit tests only
-pytest -v tests/unit/
-
-# Run integration tests only
-pytest -v tests/integration/
 ```
-
----
-
-## Platform Capabilities and Technical Notes
-
-| Feature / Capability | macOS (Apple Silicon M4) | Linux (x86_64 / ARM64) |
-| :--- | :--- | :--- |
-| Compiler Driver | Apple Clang / Homebrew LLVM | Native Clang / LLVM |
-| Measurement Backend | Monotonic CPU Timing (`time.perf_counter_ns`) | Linux Timing / `perf_event_open` |
-| Diagnostic Code | Transparent Warning `E-01` | Native Linux Backend |
-| Process Isolation | Process Group Sandbox (`start_new_session`) | Namespaces & Process Groups |
-| Warmup Runs | 3 Warmup Iterations | 3 Warmup Iterations |
-| Statistical Noise | Standard Deviation & IQR Noise | Standard Deviation & IQR Noise |
 
 ---
 

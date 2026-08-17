@@ -53,6 +53,7 @@ jobs:
     name: Build & Publish to PyPI
     needs: test-and-lint
     runs-on: ubuntu-latest
+    environment: pypi
     permissions:
       id-token: write
       contents: read
