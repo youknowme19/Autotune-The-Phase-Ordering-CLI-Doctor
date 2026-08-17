@@ -10,7 +10,7 @@
 
 ---
 
-## 💡 The Problem: Compiler Phase Ordering
+## The Problem: Compiler Phase Ordering
 
 Standard compiler optimization flags like `-O3` apply a fixed, fixed-order sequence of generic optimization passes to every function regardless of its unique structure.
 
@@ -23,7 +23,7 @@ However, compiler passes interact dynamically:
 
 ---
 
-## 🛡️ Core Philosophy
+## Core Philosophy
 
 > **"Never recommend an optimization merely because an AI says it might be faster. Compile it, execute it, verify correctness, and measure it first."**
 
@@ -34,20 +34,20 @@ Autotune enforces empirical validation at every step:
 
 ---
 
-## ✨ Key Features
+## Key Features
 
-- **🩺 Environment & Toolchain Doctor (`autotune doctor`)**: Validates local Python 3.11+, Clang, LLVM `opt`, operating system, CPU architecture, and measurement capabilities.
+- ** Environment & Toolchain Doctor (`autotune doctor`)**: Validates local Python 3.11+, Clang, LLVM `opt`, operating system, CPU architecture, and measurement capabilities.
 - **🔬 Code Feature Extraction**: Analyzes C/C++ AST structure (loops, memory access patterns, compute density) and extracts compact JSON features to prompt the LLM safely without raw code dumps.
-- **🤖 LLM Pass Pipeline Seeding**: Generates domain-tailored initial pass sequences using LLM intelligence, validated against local LLVM capabilities.
-- **🧬 Deterministic Genetic Algorithm Search**: Mutates (insert, delete, swap) and crosses over (2-point crossover) pass pipelines with reproducible random seeding (`--seed 42`).
-- **🔒 Isolated Sandbox Execution**: Runs candidate binaries in isolated process groups (`start_new_session=True`) with strict timeouts and `SIGKILL` cleanup.
-- **✅ Ground-Truth Correctness Validator**: Compares candidate stdout/stderr and exit codes against trusted `-O3` baseline runs to reject divergent outputs.
-- **📊 Cross-Platform Performance Runners**: Platform-specific backends (`MacOSPerformanceRunner` and `LinuxPerformanceRunner`) with statistical sampling (median, stddev, relative noise ratio).
-- **📋 Reproducible Compiler Prescriptions**: Generates exact, copy-pasteable `clang` and `opt` compilation commands for production integration.
+- ** LLM Pass Pipeline Seeding**: Generates domain-tailored initial pass sequences using LLM intelligence, validated against local LLVM capabilities.
+- ** Deterministic Genetic Algorithm Search**: Mutates (insert, delete, swap) and crosses over (2-point crossover) pass pipelines with reproducible random seeding (`--seed 42`).
+- ** Isolated Sandbox Execution**: Runs candidate binaries in isolated process groups (`start_new_session=True`) with strict timeouts and `SIGKILL` cleanup.
+- ** Ground-Truth Correctness Validator**: Compares candidate stdout/stderr and exit codes against trusted `-O3` baseline runs to reject divergent outputs.
+- ** Cross-Platform Performance Runners**: Platform-specific backends (`MacOSPerformanceRunner` and `LinuxPerformanceRunner`) with statistical sampling (median, stddev, relative noise ratio).
+- ** Reproducible Compiler Prescriptions**: Generates exact, copy-pasteable `clang` and `opt` compilation commands for production integration.
 
 ---
 
-## 🏗️ System Architecture
+##  System Architecture
 
 ```text
                C/C++ Source Code
@@ -104,7 +104,7 @@ autotune/
 
 ---
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Prerequisites
 
@@ -132,7 +132,7 @@ pip install -e ".[dev]"
 
 ---
 
-## 💻 CLI Commands & Usage
+##  CLI Commands & Usage
 
 ### 1. Toolchain Health Check (`autotune doctor`)
 
@@ -247,7 +247,7 @@ autotune validate ./examples/simple_loop/kernel.c ./path/to/candidate.bin --work
 
 ---
 
-## 🧪 Testing
+##  Testing
 
 Autotune includes a comprehensive suite of unit and integration tests:
 
@@ -264,7 +264,7 @@ pytest -v tests/integration/
 
 ---
 
-## ⚡ Platform Capabilities & Notes
+## Platform Capabilities & Notes
 
 | Feature / Platform | macOS (Apple Silicon M4) | Linux (x86_64 / ARM64) |
 | :--- | :--- | :--- |
@@ -275,6 +275,6 @@ pytest -v tests/integration/
 
 ---
 
-## 📄 License
+## License
 
 Distributed under the **Apache 2.0 License**. See [`LICENSE`](LICENSE) for details.
