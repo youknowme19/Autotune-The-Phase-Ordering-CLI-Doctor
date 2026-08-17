@@ -25,7 +25,9 @@ class ExecutionMetrics(BaseModel):
     max_time_ns: float
     stddev_time_ns: float
     noise_ratio: float  # stddev / median
-    cycles: Optional[int] = None  # Hardware counter cycles (Linux only, None on macOS)
+    iqr_time_ns: Optional[float] = None  # Interquartile range (q75 - q25)
+    iqr_noise_ratio: Optional[float] = None  # iqr / median
+    cycles: Optional[int] = None  # Hardware counter cycles (Linux perf, None on macOS)
     instructions: Optional[int] = None
 
 

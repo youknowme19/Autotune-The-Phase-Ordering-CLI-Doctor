@@ -5,6 +5,7 @@ Genetic Algorithm Engine orchestrating compiler pass pipeline search.
 import os
 import random
 import tempfile
+import time
 from typing import Callable, List, Optional
 from pydantic import BaseModel
 
@@ -28,10 +29,11 @@ class SearchProgressStats(BaseModel):
     baseline_fitness_ns: Optional[float]
     speedup_factor: Optional[float]
     valid_candidates_count: int
+    stop_reason: Optional[str] = None
 
 
 class GeneticAlgorithmEngine:
-    """Orchestrates Genetic Algorithm pass optimization search."""
+    """Orchestrates Genetic Algorithm pass optimization search with multiple stopping criteria."""
 
     def __init__(
         self,
@@ -42,6 +44,8 @@ class GeneticAlgorithmEngine:
         generations: int = 40,
         mutation_rate: float = 0.3,
         crossover_rate: float = 0.7,
+        max_stagnant_generations: int = 10,
+        max_search_time_seconds: Optional[float] = None,
     ):
         self.compiler = compiler
         self.runner = runner
@@ -50,6 +54,8 @@ class GeneticAlgorithmEngine:
         self.generations = generations
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
+        self.max_stagnant_generations = max_stagnant_generations
+        self.max_search_time_seconds = max_search_time_seconds
 
         self.rng = random.Random(seed) if seed is not None else random.Random()
         self.validator = compiler.validator
@@ -65,7 +71,6 @@ class GeneticAlgorithmEngine:
         for seq in initial_sequences:
             individuals.append(Individual(sequence=seq))
 
-        # Fill remaining population with mutated variations of initial seeds
         base_pool = list(initial_sequences) if initial_sequences else [PassSequence(passes=["mem2reg", "gvn"])]
         while len(individuals) < self.population_size:
             parent = self.rng.choice(base_pool)
@@ -90,7 +95,7 @@ class GeneticAlgorithmEngine:
 
         bench_res = self.runner.run_benchmark(cand_bin, workload_path=workload_path)
 
-        # Validate correctness
+        # Validate correctness against baseline run output
         cand_exec_res = SandboxExecutionResult(
             success=bench_res.success,
             stdout=bench_res.stdout,
@@ -110,7 +115,11 @@ class GeneticAlgorithmEngine:
         initial_sequences: List[PassSequence],
         callback: Optional[Callable[[SearchProgressStats], None]] = None,
     ) -> Population:
-        """Run complete GA search loop over generations."""
+        """Run complete GA search loop over generations with early stopping and timeout limits."""
+        search_start_t = time.perf_counter()
+        best_fitness_ever: Optional[float] = None
+        stagnant_generations = 0
+
         with tempfile.TemporaryDirectory() as tmpdir:
             pop = self.initialize_population(initial_sequences)
 
@@ -125,8 +134,26 @@ class GeneticAlgorithmEngine:
                 pop.sort_individuals()
                 best = pop.best_individual()
 
+                stop_reason = None
+                best_ns = best.fitness if best else None
+
+                # Check fitness plateau / stagnation
+                if best_ns is not None:
+                    if best_fitness_ever is None or best_ns < (best_fitness_ever - 1e-6):
+                        best_fitness_ever = best_ns
+                        stagnant_generations = 0
+                    else:
+                        stagnant_generations += 1
+
+                if self.max_stagnant_generations and stagnant_generations >= self.max_stagnant_generations:
+                    stop_reason = f"Plateau reached ({stagnant_generations} stagnant generations)"
+
+                # Check max search time
+                elapsed_s = time.perf_counter() - search_start_t
+                if self.max_search_time_seconds and elapsed_s >= self.max_search_time_seconds:
+                    stop_reason = f"Search timeout reached ({round(elapsed_s, 1)}s)"
+
                 if callback:
-                    best_ns = best.fitness if best else None
                     speedup = (baseline_time_ns / best_ns) if (best_ns and best_ns > 0) else None
                     valid_cnt = sum(1 for ind in pop.individuals if ind.is_valid)
                     stats = SearchProgressStats(
@@ -136,10 +163,11 @@ class GeneticAlgorithmEngine:
                         baseline_fitness_ns=baseline_time_ns,
                         speedup_factor=speedup,
                         valid_candidates_count=valid_cnt,
+                        stop_reason=stop_reason,
                     )
                     callback(stats)
 
-                if gen == self.generations - 1:
+                if stop_reason or gen == self.generations - 1:
                     break
 
                 # Produce next generation

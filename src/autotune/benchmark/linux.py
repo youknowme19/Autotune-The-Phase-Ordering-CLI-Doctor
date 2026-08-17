@@ -39,6 +39,7 @@ class LinuxPerformanceRunner(PerformanceRunner):
         workload_path: Optional[str] = None,
         repetitions: int = 10,
         timeout_seconds: float = 5.0,
+        warmup_runs: int = 3,
     ) -> BenchmarkResult:
         if platform.system() != "Linux":
             e01 = DoctorError(
@@ -66,29 +67,31 @@ class LinuxPerformanceRunner(PerformanceRunner):
         last_stdout = ""
         last_stderr = ""
 
-        # Warmup run
-        warmup = executor.execute(
-            binary_path, workload_path=workload_path, timeout_seconds=timeout_seconds
-        )
-        if not warmup.success:
-            return BenchmarkResult(
-                success=False,
-                metadata=BenchmarkEnvironmentMetadata(
-                    platform=self.platform_name,
-                    architecture=self.architecture,
-                    compiler_version=self.compiler_version,
-                    measurement_backend="Linux timing backend",
-                    cpu_info=self.cpu_info,
-                    sample_count=0,
-                    noise_ratio=0.0,
-                    is_fallback_measurement=True,
-                ),
-                stdout=warmup.stdout,
-                stderr=warmup.stderr,
-                exit_code=warmup.exit_code,
-                error_message=f"Warmup execution failed: {warmup.error_message}",
+        # Perform 3 warmup runs to stabilize CPU caches
+        for _ in range(max(3, warmup_runs)):
+            warmup = executor.execute(
+                binary_path, workload_path=workload_path, timeout_seconds=timeout_seconds
             )
+            if not warmup.success:
+                return BenchmarkResult(
+                    success=False,
+                    metadata=BenchmarkEnvironmentMetadata(
+                        platform=self.platform_name,
+                        architecture=self.architecture,
+                        compiler_version=self.compiler_version,
+                        measurement_backend="Linux timing backend",
+                        cpu_info=self.cpu_info,
+                        sample_count=0,
+                        noise_ratio=0.0,
+                        is_fallback_measurement=True,
+                    ),
+                    stdout=warmup.stdout,
+                    stderr=warmup.stderr,
+                    exit_code=warmup.exit_code,
+                    error_message=f"Warmup execution failed: {warmup.error_message}",
+                )
 
+        # Timed measurement runs
         for _ in range(repetitions):
             start = time.perf_counter_ns()
             res = executor.execute(
@@ -128,6 +131,16 @@ class LinuxPerformanceRunner(PerformanceRunner):
         )
         noise_ratio = stddev_val / median_val if median_val > 0 else 0.0
 
+        if len(samples_ns) >= 4:
+            sorted_s = sorted(samples_ns)
+            q25 = float(statistics.quantiles(sorted_s, n=4)[0])
+            q75 = float(statistics.quantiles(sorted_s, n=4)[2])
+            iqr_val = q75 - q25
+            iqr_ratio = iqr_val / median_val if median_val > 0 else 0.0
+        else:
+            iqr_val = 0.0
+            iqr_ratio = 0.0
+
         metrics = ExecutionMetrics(
             samples_ns=samples_ns,
             median_time_ns=median_val,
@@ -136,6 +149,8 @@ class LinuxPerformanceRunner(PerformanceRunner):
             max_time_ns=max_val,
             stddev_time_ns=stddev_val,
             noise_ratio=noise_ratio,
+            iqr_time_ns=iqr_val,
+            iqr_noise_ratio=iqr_ratio,
             cycles=None,
             instructions=None,
         )

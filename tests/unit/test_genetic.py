@@ -1,5 +1,5 @@
 """
-Unit tests for Genetic Algorithm operators, fitness ordering, and determinism.
+Unit tests for Genetic Algorithm operators, selection, mutation, crossover, elitism, and stopping criteria.
 """
 
 import random
@@ -8,6 +8,7 @@ from autotune.llvm.passes import PassSequence
 from autotune.search.fitness import FitnessEvaluator
 from autotune.search.individual import Individual
 from autotune.search.mutation import Mutator
+from autotune.search.population import Population
 from autotune.search.selection import Selector
 
 
@@ -33,7 +34,24 @@ def test_fitness_ordering():
     # Failed individuals sort after valid ones
 
 
-def test_deterministic_seed():
+def test_elitism_preservation():
+    rng = random.Random(42)
+    selector = Selector(rng=rng)
+
+    ind1 = Individual(sequence=PassSequence(passes=["mem2reg"]), fitness=50.0)
+    ind2 = Individual(sequence=PassSequence(passes=["gvn"]), fitness=100.0)
+    ind3 = Individual(sequence=PassSequence(passes=["licm"]), fitness=150.0)
+    ind4 = Individual(sequence=PassSequence(passes=["dce"]), compilation_success=False, fitness=float("inf"))
+
+    pop = [ind3, ind1, ind4, ind2]
+    elites = selector.get_elites(pop, n=2)
+
+    assert len(elites) == 2
+    assert elites[0] == ind1
+    assert elites[1] == ind2
+
+
+def test_deterministic_seeding():
     rng1 = random.Random(42)
     mutator1 = Mutator(rng=rng1)
     seq1 = PassSequence(passes=["mem2reg", "gvn"])
@@ -47,7 +65,7 @@ def test_deterministic_seed():
     assert mutated1.passes == mutated2.passes
 
 
-def test_tournament_selection():
+def test_tournament_selection_k3():
     rng = random.Random(42)
     selector = Selector(rng=rng)
 
@@ -55,5 +73,20 @@ def test_tournament_selection():
     ind2 = Individual(sequence=PassSequence(passes=["gvn"]), fitness=100.0)
     ind3 = Individual(sequence=PassSequence(passes=["licm"]), fitness=150.0)
 
-    selected = selector.tournament_select([ind1, ind2, ind3], k=2)
+    selected = selector.tournament_select([ind1, ind2, ind3], k=3)
     assert selected in [ind1, ind2, ind3]
+
+
+def test_mutator_operations():
+    rng = random.Random(42)
+    mutator = Mutator(rng=rng)
+    seq = PassSequence(passes=["mem2reg", "gvn", "instcombine"])
+
+    inserted = mutator.insert(seq)
+    assert len(inserted.passes) == 4
+
+    deleted = mutator.delete(seq)
+    assert len(deleted.passes) == 2
+
+    swapped = mutator.swap(seq)
+    assert len(swapped.passes) == 3
