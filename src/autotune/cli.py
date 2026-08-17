@@ -16,14 +16,16 @@ from autotune.config import get_default_config
 from autotune.doctor import run_doctor_checks
 from autotune.llm import get_llm_client
 from autotune.llvm import CompilerDriver, PassSequence
-from autotune.reporting import PrescriptionBuilder
+from autotune.reporting import PrescriptionBuilder, SearchReport
 from autotune.sandbox import SandboxExecutor
-from autotune.search import GeneticAlgorithmEngine
+from autotune.search import GeneticAlgorithmEngine, SearchProgressStats
 from autotune.ui import (
+    SearchDashboard,
     console,
     print_banner,
     print_diagnose_summary,
     print_doctor_report,
+    print_search_results_summary,
 )
 
 app = typer.Typer(
@@ -101,6 +103,8 @@ def search(
     generations: int = typer.Option(5, "--generations", "-g", help="GA generation count"),
     population: int = typer.Option(10, "--population", "-p", help="GA population size"),
     seed: Optional[int] = typer.Option(42, "--seed", "-s", help="Random seed for deterministic search"),
+    output_json: Optional[str] = typer.Option(None, "--output-json", "-o", help="Path to export structured JSON search report"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
 ):
     """Run AI-guided genetic algorithm search for optimal LLVM pass pipelines."""
     if not os.path.exists(source):
@@ -116,11 +120,17 @@ def search(
         cpu_info=doc_report.cpu_info,
     )
 
-    extractor = FeatureExtractor()
+    extractor = FeatureExtractor(clang_path=doc_report.clang_path)
     features = extractor.extract_from_file(source)
+
+    if verbose:
+        console.print(f"[dim]Features extracted: {features.suggested_focus_areas}[/dim]")
 
     llm = get_llm_client(validator=compiler.validator)
     seed_sequences = llm.generate_candidates(features, count=4)
+
+    dashboard = SearchDashboard(total_generations=generations, source_filename=os.path.basename(source))
+    dashboard.start()
 
     with tempfile.TemporaryDirectory() as tmpdir:
         base_bin = os.path.join(tmpdir, "baseline.bin")
@@ -139,16 +149,20 @@ def search(
             generations=generations,
         )
 
-        console.print(f"[bold cyan]Starting optimization search on {source}...[/bold cyan]")
+        def on_progress(stats: SearchProgressStats) -> None:
+            dashboard.update(stats)
+
         pop = engine.evolve(
             source_path=source,
             workload_path=workload,
             baseline_res=base_exec,
             baseline_time_ns=base_time,
             initial_sequences=seed_sequences,
+            callback=on_progress,
         )
 
         best = pop.best_individual()
+        prescription = None
         if best and best.fitness:
             prescription = PrescriptionBuilder.build(
                 source_path=source,
@@ -159,13 +173,23 @@ def search(
                 baseline_time_ns=base_time,
                 candidate_time_ns=best.fitness,
             )
-
-            console.print("\n[bold green]Optimization Search Complete![/bold green]")
-            console.print(f"Best Pass Sequence: {best.sequence.passes}")
-            console.print(f"Speedup: {prescription.speedup_ratio}x")
-            console.print(f"\n[bold white]Reproducible Command:[/bold white]\n{prescription.reproducible_clang_command}")
+            print_search_results_summary(prescription)
         else:
-            console.print("[bold yellow]No valid candidates outperform baseline.[/bold yellow]")
+            console.print("\n[bold yellow]No valid candidates outperform baseline.[/bold yellow]")
+
+        if output_json:
+            report = SearchReport(
+                source_path=source,
+                workload_path=workload,
+                doctor_report=doc_report,
+                baseline_result=base_bench,
+                prescription=prescription,
+                generations_searched=generations,
+                population_size=population,
+                seed=seed,
+            )
+            report.export_json(output_json)
+            console.print(f"[green]Report exported to {output_json}[/green]")
 
 
 @app.command()

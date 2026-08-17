@@ -55,5 +55,6 @@ htmlcov/
 *.out
 *.exe
 *.bin
+*.json
 tmp/
 .autotune_cache/
