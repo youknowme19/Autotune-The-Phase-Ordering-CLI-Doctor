@@ -10,6 +10,8 @@ jobs:
   build-binaries:
     name: Build Binary (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -38,13 +40,15 @@ jobs:
 
       - name: Build standalone executable with PyInstaller
         run: |
-          pyinstaller --onefile \
+          python -m PyInstaller --onefile \
                       --name=${{ matrix.binary_name }} \
                       --clean \
+                      --collect-all autotune \
                       src/autotune/cli.py
 
       - name: Test standalone binary execution
         run: |
+          ./dist/${{ matrix.binary_name }} --help
           ./dist/${{ matrix.binary_name }} doctor
 
       - name: Upload Binary Artifact
