@@ -4,6 +4,7 @@ Typer CLI application entry point for Autotune.
 
 import os
 import tempfile
+import time
 from typing import Optional
 import typer
 from rich.console import Console
@@ -11,12 +12,19 @@ from rich.console import Console
 from autotune import __version__
 from autotune.analysis import FeatureExtractor
 from autotune.benchmark import get_performance_runner
-from autotune.benchmark.correctness import CorrectnessValidator
+from autotune.benchmark.correctness import (
+    CorrectnessValidator,
+    CustomScriptValidator,
+    ExitCodeAndStdoutStderrValidator,
+    FileDigestValidator,
+    NumericToleranceValidator,
+)
 from autotune.config import get_default_config
 from autotune.doctor import run_doctor_checks
 from autotune.llm import get_llm_client
 from autotune.llvm import CompilerDriver, PassSequence
 from autotune.reporting import PrescriptionBuilder, SearchReport
+from autotune.reporting.manifest import ExperimentManifestExporter
 from autotune.sandbox import SandboxExecutor
 from autotune.search import GeneticAlgorithmEngine, SearchProgressStats
 from autotune.ui import (
@@ -103,6 +111,9 @@ def search(
     generations: int = typer.Option(5, "--generations", "-g", help="GA generation count"),
     population: int = typer.Option(10, "--population", "-p", help="GA population size"),
     seed: Optional[int] = typer.Option(42, "--seed", "-s", help="Random seed for deterministic search"),
+    use_llm: bool = typer.Option(False, "--llm/--no-llm", help="Enable LLM candidate proposal seeding"),
+    provider: str = typer.Option("heuristic", "--provider", help="LLM Provider [openai|anthropic|gemini|heuristic]"),
+    correctness_strategy: str = typer.Option("exitcode", "--correctness-strategy", help="Strategy [exitcode|numeric|filedigest|custom]"),
     output_json: Optional[str] = typer.Option(None, "--output-json", "-o", help="Path to export structured JSON search report"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
 ):
@@ -126,7 +137,12 @@ def search(
     if verbose:
         console.print(f"[dim]Features extracted: {features.suggested_focus_areas}[/dim]")
 
-    llm = get_llm_client(validator=compiler.validator)
+    # Select correctness strategy
+    strat = ExitCodeAndStdoutStderrValidator()
+    if correctness_strategy == "numeric":
+        strat = NumericToleranceValidator()
+
+    llm = get_llm_client(provider=provider, use_llm=use_llm, validator=compiler.validator)
     seed_sequences = llm.generate_candidates(features, count=4)
 
     dashboard = SearchDashboard(total_generations=generations, source_filename=os.path.basename(source))
@@ -147,6 +163,7 @@ def search(
             seed=seed,
             population_size=population,
             generations=generations,
+            correctness_strategy=strat,
         )
 
         def on_progress(stats: SearchProgressStats) -> None:
@@ -176,6 +193,21 @@ def search(
             print_search_results_summary(prescription)
         else:
             console.print("\n[bold yellow]No valid candidates outperform baseline.[/bold yellow]")
+
+        # Export manifest run artifacts
+        run_id = f"run_{int(time.time())}"
+        manifest_dir = ExperimentManifestExporter.export_run(
+            run_id=run_id,
+            source_path=source,
+            workload_path=workload,
+            seed=seed,
+            doc_report=doc_report,
+            baseline_result=base_bench,
+            candidates=pop.individuals,
+            winning_individual=best,
+            prescription=prescription,
+        )
+        console.print(f"[dim]Run artifacts saved to {manifest_dir}/[/dim]")
 
         if output_json:
             report = SearchReport(

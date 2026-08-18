@@ -17,6 +17,11 @@ class Individual(BaseModel):
     error_message: Optional[str] = None
 
     @property
+    def is_evaluated(self) -> bool:
+        """Returns True if fitness evaluation has been completed."""
+        return self.fitness is not None
+
+    @property
     def is_valid(self) -> bool:
         return self.compilation_success and self.correctness_success and self.fitness is not None
 

@@ -12,6 +12,16 @@ from autotune.search.population import Population
 from autotune.search.selection import Selector
 
 
+def test_individual_evaluation_properties():
+    ind = Individual(sequence=PassSequence(passes=["mem2reg"]))
+    assert not ind.is_evaluated
+    assert not ind.is_valid
+
+    ind.fitness = 120.5
+    assert ind.is_evaluated
+    assert ind.is_valid
+
+
 def test_fitness_ordering():
     i1 = Individual(sequence=PassSequence(passes=["mem2reg"]), fitness=100.0)
     i2 = Individual(sequence=PassSequence(passes=["gvn"]), fitness=200.0)
@@ -26,12 +36,12 @@ def test_fitness_ordering():
         fitness=float("inf"),
     )
 
-    pop = [i2, i_fail_comp, i1, i_fail_corr]
-    pop.sort()
+    pop = Population(generation=0, individuals=[i2, i_fail_comp, i1, i_fail_corr])
+    pop.sort_individuals()
 
-    assert pop[0] == i1  # Lowest runtime (100.0 ns) is best
-    assert pop[1] == i2  # 200.0 ns is second best
-    # Failed individuals sort after valid ones
+    assert pop.best_individual() == i1  # Lowest runtime (100.0 ns) is best
+    assert pop.individuals[0] == i1
+    assert pop.individuals[1] == i2
 
 
 def test_elitism_preservation():
@@ -79,7 +89,7 @@ def test_tournament_selection_k3():
 
 def test_mutator_operations():
     rng = random.Random(42)
-    mutator = Mutator(rng=rng)
+    mutator = Mutator(rng=rng, min_length=2)
     seq = PassSequence(passes=["mem2reg", "gvn", "instcombine"])
 
     inserted = mutator.insert(seq)

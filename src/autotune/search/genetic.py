@@ -1,16 +1,18 @@
 """
-Genetic Algorithm Engine orchestrating compiler pass pipeline search.
+Genetic Algorithm Engine orchestrating compiler pass pipeline search with parallel evaluation, memoization, and strict evaluation invariants.
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import hashlib
 import os
 import random
 import tempfile
 import time
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 from pydantic import BaseModel
 
 from autotune.benchmark import PerformanceRunner, get_performance_runner
-from autotune.benchmark.correctness import CorrectnessValidator
+from autotune.benchmark.correctness import CorrectnessStrategy, CorrectnessValidator, ExitCodeAndStdoutStderrValidator
 from autotune.benchmark.models import BenchmarkResult
 from autotune.llvm.compiler import CompilerDriver
 from autotune.llvm.passes import PassSequence, PassValidator
@@ -33,7 +35,7 @@ class SearchProgressStats(BaseModel):
 
 
 class GeneticAlgorithmEngine:
-    """Orchestrates Genetic Algorithm pass optimization search with multiple stopping criteria."""
+    """Orchestrates Genetic Algorithm pass optimization search with parallel evaluation and invariants."""
 
     def __init__(
         self,
@@ -46,6 +48,8 @@ class GeneticAlgorithmEngine:
         crossover_rate: float = 0.7,
         max_stagnant_generations: int = 10,
         max_search_time_seconds: Optional[float] = None,
+        correctness_strategy: Optional[CorrectnessStrategy] = None,
+        max_workers: int = 4,
     ):
         self.compiler = compiler
         self.runner = runner
@@ -56,12 +60,19 @@ class GeneticAlgorithmEngine:
         self.crossover_rate = crossover_rate
         self.max_stagnant_generations = max_stagnant_generations
         self.max_search_time_seconds = max_search_time_seconds
+        self.max_workers = max_workers
 
         self.rng = random.Random(seed) if seed is not None else random.Random()
         self.validator = compiler.validator
         self.mutator = Mutator(validator=self.validator, rng=self.rng)
         self.selector = Selector(rng=self.rng)
-        self.correctness_validator = CorrectnessValidator()
+        self.correctness_validator = CorrectnessValidator(strategy=correctness_strategy)
+
+        # Candidate evaluation memoization cache (SHA-256 pipeline string -> evaluated Individual)
+        self.eval_cache: Dict[str, Individual] = {}
+
+    def get_sequence_hash(self, sequence: PassSequence) -> str:
+        return hashlib.sha256(sequence.serialize().encode("utf-8")).hexdigest()
 
     def initialize_population(
         self, initial_sequences: List[PassSequence]
@@ -69,7 +80,8 @@ class GeneticAlgorithmEngine:
         """Seed population with LLM proposals and mutated variants."""
         individuals: List[Individual] = []
         for seq in initial_sequences:
-            individuals.append(Individual(sequence=seq))
+            norm_seq = self.mutator.normalize(seq)
+            individuals.append(Individual(sequence=norm_seq))
 
         base_pool = list(initial_sequences) if initial_sequences else [PassSequence(passes=["mem2reg", "gvn"])]
         while len(individuals) < self.population_size:
@@ -87,15 +99,20 @@ class GeneticAlgorithmEngine:
         baseline_res: SandboxExecutionResult,
         output_dir: str,
     ) -> Individual:
-        cand_bin = os.path.join(output_dir, f"cand_{abs(hash(individual.sequence.serialize()))}.bin")
+        seq_hash = self.get_sequence_hash(individual.sequence)
+        if seq_hash in self.eval_cache:
+            return self.eval_cache[seq_hash]
+
+        cand_bin = os.path.join(output_dir, f"cand_{seq_hash[:12]}.bin")
         compile_res = self.compiler.compile_candidate(source_path, individual.sequence, cand_bin)
 
         if not compile_res.success:
-            return FitnessEvaluator.evaluate(individual, compile_res, None, None)
+            evaluated = FitnessEvaluator.evaluate(individual, compile_res, None, None)
+            self.eval_cache[seq_hash] = evaluated
+            return evaluated
 
         bench_res = self.runner.run_benchmark(cand_bin, workload_path=workload_path)
 
-        # Validate correctness against baseline run output
         cand_exec_res = SandboxExecutionResult(
             success=bench_res.success,
             stdout=bench_res.stdout,
@@ -104,7 +121,9 @@ class GeneticAlgorithmEngine:
         )
         correctness_res = self.correctness_validator.validate(baseline_res, cand_exec_res)
 
-        return FitnessEvaluator.evaluate(individual, compile_res, correctness_res, bench_res)
+        evaluated = FitnessEvaluator.evaluate(individual, compile_res, correctness_res, bench_res)
+        self.eval_cache[seq_hash] = evaluated
+        return evaluated
 
     def evolve(
         self,
@@ -115,7 +134,7 @@ class GeneticAlgorithmEngine:
         initial_sequences: List[PassSequence],
         callback: Optional[Callable[[SearchProgressStats], None]] = None,
     ) -> Population:
-        """Run complete GA search loop over generations with early stopping and timeout limits."""
+        """Run complete GA search loop over generations with parallel evaluation and invariants."""
         search_start_t = time.perf_counter()
         best_fitness_ever: Optional[float] = None
         stagnant_generations = 0
@@ -126,10 +145,33 @@ class GeneticAlgorithmEngine:
             for gen in range(self.generations):
                 pop.generation = gen
 
-                # Evaluate un-evaluated individuals
+                # Parallel evaluation of un-evaluated individuals
+                unevaluated = [ind for ind in pop.individuals if ind.fitness is None]
+                if unevaluated:
+                    with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                        futures = {
+                            executor.submit(
+                                self.evaluate_individual, ind, source_path, workload_path, baseline_res, tmpdir
+                            ): ind
+                            for ind in unevaluated
+                        }
+                        evaluated_map = {}
+                        for future in as_completed(futures):
+                            orig_ind = futures[future]
+                            res_ind = future.result()
+                            evaluated_map[id(orig_ind)] = res_ind
+
+                        # Reassign evaluated individuals explicitly back to pop.individuals
+                        pop.individuals = [
+                            evaluated_map.get(id(ind), ind) if ind.fitness is None else ind
+                            for ind in pop.individuals
+                        ]
+
+                # Invariant Assertion: Ensure all individuals are evaluated with non-None fitness
                 for ind in pop.individuals:
-                    if ind.fitness is None:
-                        self.evaluate_individual(ind, source_path, workload_path, baseline_res, tmpdir)
+                    assert ind.fitness is not None and ind.is_evaluated, (
+                        f"Invariant Violated: Candidate {ind.sequence} fitness is None after evaluation!"
+                    )
 
                 pop.sort_individuals()
                 best = pop.best_individual()
@@ -137,7 +179,6 @@ class GeneticAlgorithmEngine:
                 stop_reason = None
                 best_ns = best.fitness if best else None
 
-                # Check fitness plateau / stagnation
                 if best_ns is not None:
                     if best_fitness_ever is None or best_ns < (best_fitness_ever - 1e-6):
                         best_fitness_ever = best_ns
@@ -148,7 +189,6 @@ class GeneticAlgorithmEngine:
                 if self.max_stagnant_generations and stagnant_generations >= self.max_stagnant_generations:
                     stop_reason = f"Plateau reached ({stagnant_generations} stagnant generations)"
 
-                # Check max search time
                 elapsed_s = time.perf_counter() - search_start_t
                 if self.max_search_time_seconds and elapsed_s >= self.max_search_time_seconds:
                     stop_reason = f"Search timeout reached ({round(elapsed_s, 1)}s)"
