@@ -12,6 +12,13 @@ from pydantic import BaseModel
 from autotune.sandbox.executor import SandboxExecutionResult, SandboxExecutor
 
 
+def strip_autotune_time_markers(text: str) -> str:
+    """Strip __AUTOTUNE_TIME_NS__:<ns> markers from stdout before performing correctness diffs."""
+    lines = text.splitlines()
+    filtered = [line for line in lines if not line.startswith("__AUTOTUNE_TIME_NS__:")]
+    return "\n".join(filtered).strip()
+
+
 class CorrectnessResult(BaseModel):
     is_correct: bool
     reason: Optional[str] = None
@@ -34,7 +41,7 @@ class CorrectnessStrategy(ABC):
 
 
 class ExitCodeAndStdoutStderrValidator(CorrectnessStrategy):
-    """Exact byte match on stdout, stderr, and exit codes."""
+    """Exact byte match on stdout, stderr, and exit codes (ignoring timing markers)."""
 
     def verify(
         self,
@@ -61,7 +68,10 @@ class ExitCodeAndStdoutStderrValidator(CorrectnessStrategy):
                 candidate_exit_code=candidate_res.exit_code,
             )
 
-        if baseline_res.stdout.strip() != candidate_res.stdout.strip():
+        b_stdout_clean = strip_autotune_time_markers(baseline_res.stdout)
+        c_stdout_clean = strip_autotune_time_markers(candidate_res.stdout)
+
+        if b_stdout_clean != c_stdout_clean:
             return CorrectnessResult(
                 is_correct=False,
                 reason="Stdout divergence from baseline.",
@@ -112,8 +122,11 @@ class NumericToleranceValidator(CorrectnessStrategy):
                 candidate_exit_code=candidate_res.exit_code,
             )
 
-        b_floats = [float(x) for x in re.findall(r"[-+]?\d*\.\d+|\d+", baseline_res.stdout)]
-        c_floats = [float(x) for x in re.findall(r"[-+]?\d*\.\d+|\d+", candidate_res.stdout)]
+        b_clean = strip_autotune_time_markers(baseline_res.stdout)
+        c_clean = strip_autotune_time_markers(candidate_res.stdout)
+
+        b_floats = [float(x) for x in re.findall(r"[-+]?\d*\.\d+|\d+", b_clean)]
+        c_floats = [float(x) for x in re.findall(r"[-+]?\d*\.\d+|\d+", c_clean)]
 
         if len(b_floats) != len(c_floats):
             return CorrectnessResult(
@@ -166,7 +179,6 @@ class FileDigestValidator(CorrectnessStrategy):
                     candidate_stdout=candidate_res.stdout,
                 )
 
-        # Basic digest comparison placeholder
         return CorrectnessResult(
             is_correct=True,
             reason="Artifact digests verified.",

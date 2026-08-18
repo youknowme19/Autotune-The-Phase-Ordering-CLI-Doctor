@@ -43,24 +43,26 @@ class DoctorReport(BaseModel):
 def find_tool(
     tool_name: str, custom_path: Optional[str] = None
 ) -> Optional[str]:
-    """Find absolute path of a tool, checking custom path, system PATH, and Homebrew locations."""
+    """Find absolute path of a tool, prioritizing matching LLVM toolchain paths."""
     if custom_path and os.path.exists(custom_path) and os.access(custom_path, os.X_OK):
         return custom_path
+
+    # Prioritize matching LLVM Homebrew toolchain paths first for clang/opt version parity
+    candidate_paths = [
+        f"/opt/homebrew/opt/llvm/bin/{tool_name}",
+        f"/usr/local/opt/llvm/bin/{tool_name}",
+    ]
+    for candidate in candidate_paths:
+        if os.path.exists(candidate) and os.access(candidate, os.X_OK):
+            return candidate
 
     # Standard PATH search
     which_path = shutil.which(tool_name)
     if which_path:
         return which_path
 
-    # Common macOS / Homebrew locations
-    candidate_paths = [
-        f"/opt/homebrew/opt/llvm/bin/{tool_name}",
-        f"/usr/local/opt/llvm/bin/{tool_name}",
-        f"/usr/bin/{tool_name}",
-    ]
-    for candidate in candidate_paths:
-        if os.path.exists(candidate) and os.access(candidate, os.X_OK):
-            return candidate
+    if os.path.exists(f"/usr/bin/{tool_name}") and os.access(f"/usr/bin/{tool_name}", os.X_OK):
+        return f"/usr/bin/{tool_name}"
 
     return None
 
@@ -93,7 +95,15 @@ def run_doctor_checks(
     warnings: List[str] = []
     errors: List[str] = []
 
-    # 1. Clang check
+    # 1. Opt check first to locate LLVM toolchain dir
+    opt_path = find_tool("opt", custom_opt)
+
+    # 2. Clang check (prefer matching clang from same directory as opt if found)
+    if opt_path and not custom_clang:
+        same_dir_clang = os.path.join(os.path.dirname(opt_path), "clang")
+        if os.path.exists(same_dir_clang) and os.access(same_dir_clang, os.X_OK):
+            custom_clang = same_dir_clang
+
     clang_path = find_tool("clang", custom_clang)
     clang_version = None
     clang_ok = False
@@ -107,8 +117,6 @@ def run_doctor_checks(
     else:
         errors.append("Clang executable not found in PATH or standard LLVM installation paths.")
 
-    # 2. Opt check
-    opt_path = find_tool("opt", custom_opt)
     opt_version = None
     opt_ok = False
     llvm_version = None
@@ -117,7 +125,6 @@ def run_doctor_checks(
         if out:
             opt_version = out.splitlines()[0]
             opt_ok = True
-            # Extract version string e.g. "LLVM version 22.1.8"
             for line in out.splitlines():
                 if "LLVM version" in line or "version" in line:
                     llvm_version = line.strip()

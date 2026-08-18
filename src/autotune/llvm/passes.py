@@ -50,9 +50,9 @@ class PassSequence(BaseModel):
 
     def to_opt_string(self) -> str:
         """Format pass sequence as comma-separated string for opt -passes="..."."""
-        if not self.passes:
-            return "mem2reg"
-        return ",".join(self.passes)
+        from autotune.llvm.registry import LLVMPassRegistry
+        registry = LLVMPassRegistry()
+        return registry.construct_npm_pipeline_string(self)
 
     def insert(self, pass_name: str, index: Optional[int] = None) -> "PassSequence":
         new_passes = list(self.passes)

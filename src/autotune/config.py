@@ -1,5 +1,5 @@
 """
-Configuration module for Autotune using Pydantic.
+Configuration module for Autotune with secure keyring credential management.
 """
 
 from typing import Optional
@@ -8,6 +8,53 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
+
+KEYRING_SERVICE_NAME = "autotune"
+
+
+class CredentialStore:
+    """Manages secure resolution and storage of API credentials via environment and OS keyring."""
+
+    @staticmethod
+    def get_api_key(provider: str = "openai") -> Optional[str]:
+        """
+        Resolution Order:
+        1. Environment variable (e.g. OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, AUTOTUNE_LLM_API_KEY)
+        2. OS Keyring (service="autotune", username=provider)
+        """
+        prov_upper = provider.upper()
+        env_vars = [
+            f"{prov_upper}_API_KEY",
+            "AUTOTUNE_LLM_API_KEY",
+        ]
+        if prov_upper == "GEMINI":
+            env_vars.append("GOOGLE_API_KEY")
+
+        for env_var in env_vars:
+            val = os.getenv(env_var)
+            if val and val.strip():
+                return val.strip()
+
+        # Check OS keyring
+        try:
+            import keyring
+            key = keyring.get_password(KEYRING_SERVICE_NAME, provider.lower())
+            if key and key.strip():
+                return key.strip()
+        except Exception:
+            pass
+
+        return None
+
+    @staticmethod
+    def set_api_key(provider: str, secret_key: str) -> bool:
+        """Securely store API key in OS keyring."""
+        try:
+            import keyring
+            keyring.set_password(KEYRING_SERVICE_NAME, provider.lower(), secret_key.strip())
+            return True
+        except Exception:
+            return False
 
 
 class AutotuneConfig(BaseModel):
@@ -51,19 +98,19 @@ class AutotuneConfig(BaseModel):
 
     # LLM Settings
     llm_provider: str = Field(
-        default_factory=lambda: os.getenv("AUTOTUNE_LLM_PROVIDER", "mock")
+        default_factory=lambda: os.getenv("AUTOTUNE_LLM_PROVIDER", "openai")
     )
     llm_model: str = Field(
-        default_factory=lambda: os.getenv("AUTOTUNE_LLM_MODEL", "mock-model")
-    )
-    llm_api_key: Optional[str] = Field(
-        default_factory=lambda: os.getenv("AUTOTUNE_LLM_API_KEY")
+        default_factory=lambda: os.getenv("AUTOTUNE_LLM_MODEL", "gpt-4o")
     )
 
     # Measurement backend: auto, macos_timing, linux_perf
     measurement_backend: str = Field(
         default_factory=lambda: os.getenv("AUTOTUNE_MEASUREMENT_BACKEND", "auto")
     )
+
+    def get_llm_api_key(self, provider: Optional[str] = None) -> Optional[str]:
+        return CredentialStore.get_api_key(provider or self.llm_provider)
 
 
 def get_default_config() -> AutotuneConfig:

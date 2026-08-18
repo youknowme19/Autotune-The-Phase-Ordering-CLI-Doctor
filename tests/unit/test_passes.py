@@ -8,10 +8,10 @@ from autotune.llvm.passes import PassSequence, PassValidator
 
 def test_pass_sequence_to_opt_string():
     seq = PassSequence(passes=["mem2reg", "instcombine", "gvn"])
-    assert seq.to_opt_string() == "mem2reg,instcombine,gvn"
+    assert seq.to_opt_string() == "function(mem2reg,instcombine,gvn)"
 
     empty_seq = PassSequence(passes=[])
-    assert empty_seq.to_opt_string() == "mem2reg"
+    assert empty_seq.to_opt_string() == "default<O2>"
 
 
 def test_pass_sequence_insertion():

@@ -4,8 +4,7 @@ and nesting them into valid New Pass Manager pipeline strings.
 """
 
 from enum import Enum
-import subprocess
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 from autotune.llvm.passes import PassSequence
 
 
@@ -37,17 +36,18 @@ KNOWN_PASS_CLASSIFICATIONS: Dict[str, PassType] = {
     "loop-vectorize": PassType.FUNCTION,
     "correlated-propagation": PassType.FUNCTION,
     "lower-expect": PassType.FUNCTION,
-    
-    # Loop passes
+    "tailcallelim": PassType.FUNCTION,
+    "loop-rotate": PassType.FUNCTION,
+    "loop-unroll": PassType.FUNCTION,
+    "loop-simplify": PassType.FUNCTION,
+    "loop-idiom": PassType.FUNCTION,
+    "loop-deletion": PassType.FUNCTION,
+    "loop-reduce": PassType.FUNCTION,
+    "indvars": PassType.FUNCTION,
+
+    # Loop passes requiring loop-mssa adapter
     "licm": PassType.LOOP,
-    "loop-rotate": PassType.LOOP,
-    "loop-unroll": PassType.LOOP,
-    "loop-simplify": PassType.LOOP,
-    "loop-idiom": PassType.LOOP,
-    "loop-deletion": PassType.LOOP,
-    "loop-reduce": PassType.LOOP,
-    "indvars": PassType.LOOP,
-    
+
     # Module passes
     "inline": PassType.MODULE,
     "always-inline": PassType.MODULE,
@@ -55,8 +55,9 @@ KNOWN_PASS_CLASSIFICATIONS: Dict[str, PassType] = {
     "globaldce": PassType.MODULE,
     "ipsccp": PassType.MODULE,
     "deadargelim": PassType.MODULE,
+    "argpromotion": PassType.MODULE,
 
-    # Analysis passes (should be excluded from transformation strings)
+    # Analysis passes
     "basic-aa": PassType.ANALYSIS,
     "globals-aa": PassType.ANALYSIS,
     "scalar-evolution": PassType.ANALYSIS,
@@ -88,13 +89,29 @@ class LLVMPassRegistry:
 
     def construct_npm_pipeline_string(self, sequence: PassSequence) -> str:
         """
-        Constructs valid New Pass Manager pipeline string by grouping function/loop passes into adapters.
-        e.g. ['inline', 'mem2reg', 'licm', 'gvn'] -> 'inline,function(mem2reg,gvn),loop-mssa(licm)'
-        Or standard flat string if simple passes.
+        Constructs valid New Pass Manager pipeline string by adapting loop/module passes appropriately.
+        e.g. ['inline', 'mem2reg', 'licm', 'gvn'] -> 'inline,function(mem2reg,loop-mssa(licm),gvn)'
         """
         if not sequence.passes:
             return "default<O2>"
 
         valid_seq = self.validate_sequence(sequence)
-        # Combine passes into clean pipeline string
-        return ",".join(valid_seq.passes)
+        parts: List[str] = []
+        fn_passes: List[str] = []
+
+        for p in valid_seq.passes:
+            ptype = self.get_pass_type(p)
+            if ptype == PassType.MODULE:
+                if fn_passes:
+                    parts.append(f"function({','.join(fn_passes)})")
+                    fn_passes = []
+                parts.append(p)
+            elif p == "licm":
+                fn_passes.append("loop-mssa(licm)")
+            else:
+                fn_passes.append(p)
+
+        if fn_passes:
+            parts.append(f"function({','.join(fn_passes)})")
+
+        return ",".join(parts) if parts else "default<O2>"

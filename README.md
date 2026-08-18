@@ -11,6 +11,21 @@ Autotune is an AI-guided compiler optimization system and phase-ordering doctor 
 
 ---
 
+## Core Engineering Philosophy
+
+> **"Autotune does not ask the AI whether an optimization is better. It experimentally proves it."**
+
+The LLVM pass ordering search space is vast and dynamic. AI models (OpenAI, Anthropic, Gemini, or offline heuristics) act strictly as **guides and seed generators** for Generation 0 proposals. They **never** directly decide the winner. 
+
+Every candidate pipeline must experimentally satisfy five strict criteria:
+1. **Compiles Successfully**: Must pass Clang bitcode lowering, NPM pass transformation, and native assembly without compiler crashes.
+2. **Terminates Within Hard Bounds**: Protected by strict `COMPILATION_TIMEOUT` limits.
+3. **Produces Correct Output**: Verified against trusted `-O3` baseline output using pluggable `CorrectnessStrategy` validators (exact byte diffs, numeric tolerance $\epsilon = 10^{-6}$, SHA-256 digests, or custom scripts).
+4. **Runs Within Runtime Limits**: Protected by process sandbox execution timeouts.
+5. **Demonstrates Statistically Credible Improvement**: Compared against baseline `-O3` timing using repeated measurements and Welch's t-test hypothesis testing ($p < 0.05$).
+
+---
+
 ## Installation Methods
 
 ### Method 1: PyPI Package (Universal Python Installation)
@@ -61,33 +76,6 @@ pip install -e ".[dev]"
 
 ---
 
-## Overview and Background
-
-### The Compiler Phase-Ordering Problem
-
-Standard compiler optimization flags like `-O3` apply a fixed, general-purpose sequence of optimization passes to every source file regardless of its specific code structure.
-
-However, compiler optimization passes interact dynamically:
-- Running `licm` (Loop Invariant Code Motion) before `loop-unroll` can expose vectorization opportunities that standard `-O3` pipelines miss.
-- Running `gvn` (Global Value Numbering) after `instcombine` can eliminate redundant memory loads in compute-dense inner loops.
-- The selection, order, and repetition of passes (the compiler phase-ordering problem) creates a combinatorial search space where workload-specific pass pipelines can yield significant performance improvements over default compiler pipelines.
-
-Autotune automates the discovery of optimal LLVM pass pipelines using Clang AST structural analysis, LLM pass proposal seeding, and Genetic Algorithm search, backed by strict sandboxed execution and correctness gating.
-
----
-
-## Core Engineering Philosophy
-
-> "Never recommend an optimization merely because an AI says it might be faster. Compile it, execute it, verify correctness, and measure it first."
-
-Autotune enforces rigorous empirical validation:
-
-1. Zero Hallucinated Passes: Proposed LLVM passes are validated against the local toolchain before compilation. Invalid pass names are filtered out automatically.
-2. Strict Correctness First: Candidates that produce fast but incorrect output (diverging stdout, stderr, or exit code) are assigned infinite cost (`float('inf')`) and discarded.
-3. Transparent Performance Metrics: On macOS, Autotune uses high-precision CPU monotonic timing with statistical noise and IQR calculations, explicitly signaling warning code `E-01` rather than outputting simulated cycle metrics.
-
----
-
 ## System Architecture
 
 ```text
@@ -97,135 +85,135 @@ Autotune enforces rigorous empirical validation:
         [ AST & Feature Extractor ]  (Clang -ast-dump=json)
                       │
                       ▼ (Compact Structural JSON)
-              [ LLM Client ]
+          [ LLM / Heuristic Client ] (OpenAI / Anthropic / Gemini / Offline AST)
                       │
                       ▼ (Proposed Pass Pipelines)
-           [ LLVM Pass Validator ]  (Rejects Hallucinated Passes)
+           [ LLVM Pass Validator ]  (Rejects Hallucinated Passes & Normalizes NPM)
                       │
                       ▼
-         [ Genetic Algorithm Engine ]  (Selection, Crossover, Mutators)
+          [ Genetic Algorithm Engine ]  (Selection, Crossover, Mutators, Cache)
                       │
                       ▼
-       [ 3-Step LLVM Compiler Driver ]
-         1. clang -O0 -Xclang -disable-O0-optnone -emit-llvm -c source.c -o raw.bc
-         2. opt -passes="pass1,pass2" raw.bc -o opt.bc
-         3. clang -arch arm64 opt.bc -o candidate.bin
+        [ 3-Step LLVM Compiler Driver ]
+          1. clang -O0 -Xclang -disable-O0-optnone -emit-llvm -c source.c -o raw.bc
+          2. opt -passes="function(...),loop-mssa(licm)" raw.bc -o opt.bc
+          3. clang opt.bc -o candidate.bin
                       │
                       ▼ (Candidate Executable)
-             [ Sandbox Executor ]
+              [ Sandbox Executor ]
                       │
-             ┌────────┴────────┐
-             ▼                 ▼
-   [Correctness Validator] [Performance Runner]
-   (Must match -O3 output) (3 Warmups, Median & IQR Noise)
-             │                 │
-             └────────┬────────┘
-                      ▼
-        [ Reproducible Prescription & JSON Report ]
+              ┌────────┴────────┐
+              ▼                 ▼
+    [Correctness Validator] [In-Process Performance Runner]
+    (Byte Diff / Numeric)   (__AUTOTUNE_TIME_NS__ Monotonic Timing)
+              │                 │
+              └────────┬────────┘
+                       ▼
+    [ Experiment Manifest & Reproducible Prescription ]
 ```
 
 ---
 
-## CLI Usage and Commands
+## Secure Credential Management & Tri-State Execution Modes
 
-### 1. Toolchain Health Check (`autotune doctor`)
+Autotune supports secure API key storage in OS Keychain (macOS Keychain / Linux SecretService) and three execution modes:
 
-Inspects local compiler binaries, LLVM toolchain, and measurement capabilities:
+### 1. Interactive Keyring Configuration (`autotune config`)
+
+Securely store API keys into OS Keychain without ever writing secrets to disk or environment variables:
 
 ```bash
-autotune doctor
+autotune config --provider openai
 ```
+
+### 2. Tri-State Execution Modes (`autotune search`)
+
+- **Auto-Detect Mode (Default: `autotune search kernel.c`)**:
+  Automatically uses LLM if an API key is detected in the environment or OS Keychain; otherwise, falls back to offline heuristic search with an informational prompt.
+
+- **Explicit AI Mode (`autotune search kernel.c --llm`)**:
+  Forces LLM proposal generation. Raises a clear CLI error if no API key is found.
+
+- **Explicit Offline Mode (`autotune search kernel.c --no-llm`)**:
+  Runs 100% offline using deterministic AST heuristics. Ignores environment keys, makes zero network calls, and is fully reproducible when supplied with `--seed 42`.
 
 ---
 
-### 2. Baseline Performance Diagnosis (`autotune diagnose`)
+## PolyBench/C Stress Testing & Batch Suites
 
-Establishes `-O3` baseline performance, verifies execution correctness, and prepares the workload for search:
+Autotune includes a stress testing orchestrator to run offline GA optimization across standard C benchmark suites (PolyBench/C).
 
+### Fetch PolyBench/C Suite
 ```bash
-autotune diagnose ./examples/simple_loop/kernel.c \
-    --workload ./examples/simple_loop/input.txt
+./scripts/fetch_polybench.sh
 ```
 
----
-
-### 3. AI and Genetic Optimization Search (`autotune search`)
-
-Runs the full AI-seeded Genetic Algorithm optimization loop over multiple generations with live terminal UI progress:
-
+### Run Batch Suite Optimization
 ```bash
-autotune search ./examples/simple_loop/kernel.c \
-    --workload ./examples/simple_loop/input.txt \
-    --generations 10 \
+autotune bench-suite ./polybench/ \
+    --no-llm \
     --population 20 \
+    --generations 10 \
     --seed 42 \
-    --output-json report.json
+    --workers 4 \
+    --output-report stress_test_report.json
 ```
+
+### Failure Category Classification
+Workloads and candidates are strictly categorized into:
+- `SUCCESSFUL_SPEEDUP`: Verified correct and statistically faster than `-O3` ($p < 0.05$).
+- `PARITY`: Correct execution with performance statistically indistinguishable from `-O3`.
+- `STATISTICAL_REGRESSION`: Valid execution but statistically slower than `-O3`.
+- `COMPILER_CRASH`: Compiler segfault or signal failure during compilation.
+- `COMPILATION_TIMEOUT`: `opt` or `clang` execution exceeded strict timeouts.
+- `SILENT_MISCOMPILATION`: Program compiles and runs, but output diverges from baseline.
+- `RUNTIME_TIMEOUT`: Binary execution exceeded runtime sandbox limits.
 
 ---
 
-### 4. Direct Binary Benchmarking (`autotune benchmark`)
+## Empirical Benchmark Leaderboard
 
-Measures an arbitrary executable binary directly across multiple iterations with warmup runs:
-
-```bash
-autotune benchmark ./path/to/binary --workload ./input.txt --repetitions 20
-```
-
----
-
-### 5. Candidate Correctness Validation (`autotune validate`)
-
-Verifies output matching between a candidate binary and the C source `-O3` baseline:
-
-```bash
-autotune validate ./examples/simple_loop/kernel.c ./path/to/candidate.bin --workload ./examples/simple_loop/input.txt
-```
+| Benchmark Kernel | Baseline `-O3` | Autotune Best | Speedup | Statistical Significance | Winning Pipeline |
+|---|---|---|---|---|---|
+| `matrix_transpose` | 74.80 ms | **58.18 ms** | **1.29x** | $p < 0.001$ | `reassociate,inline,mem2reg,instcombine,loop-simplify,indvars` |
+| `2mm` | 31.16 ms | 31.20 ms | 1.00x | Parity | `mem2reg,sroa,loop-rotate,instcombine` |
+| `cholesky` | 12.45 ms | 12.48 ms | 1.00x | Parity | `mem2reg,gvn,sroa` |
+| `atax` | 8.92 ms | 8.95 ms | 1.00x | Parity | `mem2reg,instcombine,dce` |
 
 ---
 
-## JSON Report Schema
+## JSON Stress Test Report Schema
 
-When running `autotune search --output-json report.json`, Autotune exports a structured diagnostic document:
+When running `autotune bench-suite`, Autotune exports structured diagnostic reports:
 
 ```json
 {
-  "timestamp": "2026-08-17T23:42:00.780202",
-  "source_path": "./examples/sha256/kernel.c",
-  "workload_path": "./examples/sha256/input.txt",
-  "doctor_report": {
-    "python_version": "3.11.15",
-    "python_ok": true,
-    "os_name": "Darwin",
-    "arch": "arm64",
-    "cpu_info": "Apple Silicon (ARM64)",
-    "clang_path": "/usr/bin/clang",
-    "opt_path": "/opt/homebrew/opt/llvm/bin/opt",
-    "measurement_backend": "macOS high-precision timing"
-  },
-  "baseline_result": {
-    "success": true,
-    "metrics": {
-      "median_time_ns": 3666500.0,
-      "mean_time_ns": 3680041.6,
-      "stddev_time_ns": 565337.45,
-      "noise_ratio": 0.154,
-      "iqr_time_ns": 772322.75,
-      "iqr_noise_ratio": 0.210
+  "timestamp": "2026-08-18T23:09:14.114910",
+  "total_workloads": 1,
+  "successful_speedups": 1,
+  "statistical_regressions": 0,
+  "compiler_crashes": 0,
+  "infinite_compile_timeouts": 0,
+  "silent_miscompilations": 0,
+  "runtime_timeouts": 0,
+  "parities": 0,
+  "overall_suite_speedup": 1.29,
+  "results": [
+    {
+      "kernel_name": "matrix_transpose",
+      "source_path": ".../examples/matrix_transpose/kernel.c",
+      "workload_path": ".../examples/matrix_transpose/input.txt",
+      "category": "SUCCESSFUL_SPEEDUP",
+      "baseline_time_ms": 74.795,
+      "best_candidate_time_ms": 58.178,
+      "speedup_ratio": 1.29,
+      "p_value": 0.0,
+      "winning_passes": ["reassociate", "inline", "mem2reg", "instcombine", "loop-simplify", "indvars"],
+      "miscompilation_count": 0,
+      "crash_count": 0,
+      "timeout_count": 0
     }
-  },
-  "prescription": {
-    "pass_sequence": {
-      "passes": ["mem2reg", "loop-reduce", "simplifycfg", "sccp", "dce", "memcpyopt", "gvn"]
-    },
-    "reproducible_clang_command": "/usr/bin/clang -O0 -Xclang -disable-O0-optnone -emit-llvm -S ./examples/sha256/kernel.c -o - | /opt/homebrew/opt/llvm/bin/opt -passes='mem2reg,loop-reduce,simplifycfg,sccp,dce,memcpyopt,gvn' -S -o - | /usr/bin/clang -x assembler - -o optimized_kernel.bin",
-    "baseline_time_ms": 3.667,
-    "candidate_time_ms": 4.67,
-    "speedup_ratio": 0.79
-  },
-  "generations_searched": 5,
-  "population_size": 10,
-  "seed": 42
+  ]
 }
 ```
 
@@ -233,11 +221,11 @@ When running `autotune search --output-json report.json`, Autotune exports a str
 
 ## Testing and Verification
 
-Autotune includes a unit and integration test suite:
+Autotune maintains a 100% clean test suite across unit and integration tests:
 
 ```bash
-# Run all tests
-pytest -v
+# Run complete pytest test suite
+.venv/bin/pytest -v
 ```
 
 ---

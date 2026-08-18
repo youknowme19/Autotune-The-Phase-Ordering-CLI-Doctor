@@ -34,7 +34,7 @@ def test_compiler_bitcode_lowering_and_opt_passes():
             step2 = compiler.run_opt_passes(raw_bc, seq, opt_bc)
             assert step2.success
             assert os.path.exists(opt_bc)
-            assert step2.pass_sequence_str == "mem2reg,instcombine"
+            assert step2.pass_sequence_str == "function(mem2reg,instcombine)"
 
             # 3. Test native executable emission
             step3 = compiler.emit_executable(opt_bc, cand_bin)

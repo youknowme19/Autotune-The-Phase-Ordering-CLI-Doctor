@@ -59,4 +59,6 @@ htmlcov/
 tmp/
 .autotune_cache/
 .autotune_runs/
+polybench/
+
 

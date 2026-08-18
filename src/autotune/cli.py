@@ -19,7 +19,7 @@ from autotune.benchmark.correctness import (
     FileDigestValidator,
     NumericToleranceValidator,
 )
-from autotune.config import get_default_config
+from autotune.config import CredentialStore, get_default_config
 from autotune.doctor import run_doctor_checks
 from autotune.llm import get_llm_client
 from autotune.llvm import CompilerDriver, PassSequence
@@ -27,6 +27,7 @@ from autotune.reporting import PrescriptionBuilder, SearchReport
 from autotune.reporting.manifest import ExperimentManifestExporter
 from autotune.sandbox import SandboxExecutor
 from autotune.search import GeneticAlgorithmEngine, SearchProgressStats
+from autotune.stress import BatchStressTestOrchestrator
 from autotune.ui import (
     SearchDashboard,
     console,
@@ -52,6 +53,24 @@ def doctor(
     report = run_doctor_checks(custom_clang=clang_path, custom_opt=opt_path)
     print_doctor_report(report)
     if not report.is_healthy:
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def config(
+    provider: str = typer.Option("openai", "--provider", help="LLM Provider [openai|anthropic|gemini]"),
+):
+    """Interactively configure LLM API key securely into OS keychain."""
+    key = typer.prompt(f"Enter API key for provider '{provider}'", hide_input=True)
+    if not key or not key.strip():
+        console.print("[bold red]Error: Empty API key provided.[/bold red]")
+        raise typer.Exit(code=1)
+
+    ok = CredentialStore.set_api_key(provider=provider, secret_key=key.strip())
+    if ok:
+        console.print(f"[bold green][OK] Saved configuration securely to OS keychain for provider '{provider}'.[/bold green]")
+    else:
+        console.print("[bold red]Failed to write credential to OS keychain.[/bold red]")
         raise typer.Exit(code=1)
 
 
@@ -111,8 +130,8 @@ def search(
     generations: int = typer.Option(5, "--generations", "-g", help="GA generation count"),
     population: int = typer.Option(10, "--population", "-p", help="GA population size"),
     seed: Optional[int] = typer.Option(42, "--seed", "-s", help="Random seed for deterministic search"),
-    use_llm: bool = typer.Option(False, "--llm/--no-llm", help="Enable LLM candidate proposal seeding"),
-    provider: str = typer.Option("heuristic", "--provider", help="LLM Provider [openai|anthropic|gemini|heuristic]"),
+    llm: Optional[bool] = typer.Option(None, "--llm/--no-llm", help="Explicitly enable or disable LLM candidate seeding"),
+    provider: str = typer.Option("openai", "--provider", help="LLM Provider [openai|anthropic|gemini]"),
     correctness_strategy: str = typer.Option("exitcode", "--correctness-strategy", help="Strategy [exitcode|numeric|filedigest|custom]"),
     output_json: Optional[str] = typer.Option(None, "--output-json", "-o", help="Path to export structured JSON search report"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
@@ -121,6 +140,30 @@ def search(
     if not os.path.exists(source):
         console.print(f"[bold red]Error: Source file '{source}' not found.[/bold red]")
         raise typer.Exit(code=1)
+
+    # Resolve Tri-State execution mode
+    api_key = CredentialStore.get_api_key(provider)
+    use_llm_mode = False
+
+    if llm is True:
+        # Mode 2: Explicit AI
+        if not api_key:
+            console.print(f"[bold red][ERROR] --llm requested but no API key found for provider '{provider}'.[/bold red]")
+            console.print("[yellow]Run 'autotune config' or set OPENAI_API_KEY / AUTOTUNE_LLM_API_KEY.[/yellow]")
+            raise typer.Exit(code=1)
+        use_llm_mode = True
+    elif llm is False:
+        # Mode 3: Explicit Offline
+        use_llm_mode = False
+    else:
+        # Mode 1: Auto-Detect
+        if api_key:
+            use_llm_mode = True
+            if verbose:
+                console.print(f"[dim][INFO] API key detected for provider '{provider}'. Running AI-guided search.[/dim]")
+        else:
+            use_llm_mode = False
+            console.print("[dim][INFO] No LLM API key detected. Running offline heuristic search.[/dim]")
 
     doc_report = run_doctor_checks()
     compiler = CompilerDriver(clang_path=doc_report.clang_path, opt_path=doc_report.opt_path)
@@ -137,13 +180,12 @@ def search(
     if verbose:
         console.print(f"[dim]Features extracted: {features.suggested_focus_areas}[/dim]")
 
-    # Select correctness strategy
     strat = ExitCodeAndStdoutStderrValidator()
     if correctness_strategy == "numeric":
         strat = NumericToleranceValidator()
 
-    llm = get_llm_client(provider=provider, use_llm=use_llm, validator=compiler.validator)
-    seed_sequences = llm.generate_candidates(features, count=4)
+    llm_client = get_llm_client(provider=provider, use_llm=use_llm_mode, api_key=api_key, validator=compiler.validator)
+    seed_sequences = llm_client.generate_candidates(features, count=4)
 
     dashboard = SearchDashboard(total_generations=generations, source_filename=os.path.basename(source))
     dashboard.start()
@@ -194,7 +236,6 @@ def search(
         else:
             console.print("\n[bold yellow]No valid candidates outperform baseline.[/bold yellow]")
 
-        # Export manifest run artifacts
         run_id = f"run_{int(time.time())}"
         manifest_dir = ExperimentManifestExporter.export_run(
             run_id=run_id,
@@ -222,6 +263,43 @@ def search(
             )
             report.export_json(output_json)
             console.print(f"[green]Report exported to {output_json}[/green]")
+
+
+@app.command(name="bench-suite")
+def bench_suite(
+    suite_dir: str = typer.Argument(..., help="Directory containing workload kernel source files"),
+    population: int = typer.Option(20, "--population", "-p", help="GA population size"),
+    generations: int = typer.Option(10, "--generations", "-g", help="GA generation count"),
+    seed: Optional[int] = typer.Option(42, "--seed", "-s", help="Random seed for deterministic offline search"),
+    output_report: str = typer.Option("stress_test_report.json", "--output-report", "-o", help="Path to export stress test report JSON"),
+    workers: int = typer.Option(4, "--workers", "-w", help="Number of parallel worker processes"),
+):
+    """Run aggressive batch stress testing across a directory of C/C++ benchmark kernels."""
+    if not os.path.exists(suite_dir):
+        console.print(f"[bold red]Error: Benchmark suite directory '{suite_dir}' not found.[/bold red]")
+        raise typer.Exit(code=1)
+
+    print_banner()
+    console.print(f"[bold cyan]Starting Batch Stress Testing on suite directory: {suite_dir}[/bold cyan]\n")
+
+    orchestrator = BatchStressTestOrchestrator(
+        population_size=population,
+        generations=generations,
+        seed=seed,
+        max_workers=workers,
+    )
+
+    report = orchestrator.run_suite(suite_dir=suite_dir, output_report_path=output_report)
+
+    console.print(f"\n[bold green]Batch Stress Testing Completed![/bold green]")
+    console.print(f"Total Workloads Tested: [bold white]{report.total_workloads}[/bold white]")
+    console.print(f"Successful Speedups:    [bold green]{report.successful_speedups}[/bold green]")
+    console.print(f"Statistical Regressions:[bold yellow]{report.statistical_regressions}[/bold yellow]")
+    console.print(f"Compiler Crashes:       [bold red]{report.compiler_crashes}[/bold red]")
+    console.print(f"Infinite Timeouts:      [bold red]{report.infinite_compile_timeouts}[/bold red]")
+    console.print(f"Silent Miscompilations: [bold red]{report.silent_miscompilations}[/bold red]")
+    console.print(f"\nOverall Suite Speedup:  [bold magenta]{report.overall_suite_speedup}x[/bold magenta]")
+    console.print(f"Report exported to:     [bold cyan]{output_report}[/bold cyan]\n")
 
 
 @app.command()
