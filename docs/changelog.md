@@ -4,6 +4,17 @@ All notable changes to the **Autotune** project are documented in this file.
 
 ---
 
+## [0.2.1] - 2026-08-19
+
+### 🛠️ Runtime Diagnostics, UX, & UI Fixes
+- **Process Exit & Signal Error Propagation**: Subprocess non-zero exit codes now explicitly format signal names (`SIGSEGV`, `SIGABRT`, `SIGTRAP`, `SIGBUS`, `SIGILL`, `SIGFPE`) and captured `stderr` instead of returning `Warmup execution failed: None`.
+- **Top-Level CLI Version Flag**: Added `autotune --version` and `autotune -V` returning authoritative version string with exit code 0.
+- **Single Banner Rendering**: Restructured CLI subcommands (`doctor`, `diagnose`, `search`) to print banner exactly once per invocation.
+- **Search Dashboard Missing Timing Fix**: Explicitly format missing or unmeasurable candidate timing as `Current Best: N/A (Speedup: N/A)` instead of falsy `0.0 ms` conversion.
+- **Accurate `--no-llm` Dashboard Status**: Explicitly render `Stage 1 LLM Seeding Skipped (--no-llm)` when `--no-llm` is specified.
+
+---
+
 ## [0.2.0] - 2026-08-19 (Release Candidate)
 
 ### 🚀 Hardened Engine & Performance Search Features

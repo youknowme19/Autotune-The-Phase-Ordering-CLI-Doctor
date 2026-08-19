@@ -111,9 +111,10 @@ def print_diagnose_summary(
 class SearchDashboard:
     """Live Rich terminal UI dashboard for genetic optimization search."""
 
-    def __init__(self, total_generations: int, source_filename: str):
+    def __init__(self, total_generations: int, source_filename: str, use_llm: bool = True):
         self.total_generations = total_generations
         self.source_filename = source_filename
+        self.use_llm = use_llm
         self.live: Optional[Live] = None
 
     def start(self) -> None:
@@ -129,10 +130,12 @@ class SearchDashboard:
         best_ms_str = f"{round(stats.best_fitness_ns / 1e6, 3)} ms" if stats.best_fitness_ns is not None else "N/A"
         speedup = f"{stats.speedup_factor:.2f}x" if stats.speedup_factor is not None else "N/A"
 
+        stage1_str = "[green]✓[/green]" if self.use_llm else "[dim]Skipped (--no-llm)[/dim]"
+
         lines = [
             "[bold cyan]AUTOTUNE PHASE-ORDERING SEARCH[/bold cyan]",
             "──────────────────────────────────────────────",
-            "Stage 1  LLM Seeding       [green]✓[/green]",
+            f"Stage 1  LLM Seeding       {stage1_str}",
             f"Stage 2  Genetic Search    [{bar_str}] [bold yellow]{pct}%[/bold yellow]",
             f"         Generation:       [bold white]{stats.generation} / {stats.total_generations}[/bold white]",
             f"         Baseline (-O3):   [dim]{b_ms_str}[/dim]",

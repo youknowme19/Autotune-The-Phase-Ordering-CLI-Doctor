@@ -195,7 +195,11 @@ def search(
     llm_client = get_llm_client(provider=provider, use_llm=use_llm_mode, api_key=api_key, validator=compiler.validator)
     seed_sequences = llm_client.generate_candidates(features, count=4)
 
-    dashboard = SearchDashboard(total_generations=generations, source_filename=os.path.basename(source))
+    dashboard = SearchDashboard(
+        total_generations=generations,
+        source_filename=os.path.basename(source),
+        use_llm=use_llm_mode,
+    )
     dashboard.start()
 
     with tempfile.TemporaryDirectory() as tmpdir:
