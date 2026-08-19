@@ -85,3 +85,23 @@ def test_atomic_cache_corruption_recovery():
         assert res is None, "Corrupt cache lookup must return None"
         assert cache_mgr.metrics.cache_corruption_recovered is True, "Corruption recovery flag must be set"
         assert not os.path.exists(meta_path), "Corrupt metadata must be quarantined/removed"
+
+
+def test_search_dashboard_rendering_none_best_fitness():
+    from autotune.search.genetic import SearchProgressStats
+    from autotune.ui.terminal import SearchDashboard
+
+    dashboard = SearchDashboard(total_generations=5, source_filename="test.c")
+    stats = SearchProgressStats(
+        generation=1,
+        total_generations=5,
+        best_fitness_ns=None,
+        baseline_fitness_ns=497679000.0,
+        speedup_factor=None,
+        valid_candidates_count=0,
+    )
+    panel = dashboard.render_panel(stats)
+    panel_str = str(panel.renderable)
+    assert "0.0 ms" not in panel_str
+    assert "Current Best:" in panel_str
+    assert "N/A" in panel_str

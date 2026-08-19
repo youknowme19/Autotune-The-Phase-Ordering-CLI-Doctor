@@ -125,9 +125,9 @@ class SearchDashboard:
         filled_bars = int(pct / 5)
         bar_str = "█" * filled_bars + "░" * (20 - filled_bars)
 
-        b_ms = round(stats.baseline_fitness_ns / 1e6, 3) if stats.baseline_fitness_ns else 0.0
-        best_ms = round(stats.best_fitness_ns / 1e6, 3) if stats.best_fitness_ns else 0.0
-        speedup = f"{stats.speedup_factor:.2f}x" if stats.speedup_factor else "N/A"
+        b_ms_str = f"{round(stats.baseline_fitness_ns / 1e6, 3)} ms" if stats.baseline_fitness_ns is not None else "N/A"
+        best_ms_str = f"{round(stats.best_fitness_ns / 1e6, 3)} ms" if stats.best_fitness_ns is not None else "N/A"
+        speedup = f"{stats.speedup_factor:.2f}x" if stats.speedup_factor is not None else "N/A"
 
         lines = [
             "[bold cyan]AUTOTUNE PHASE-ORDERING SEARCH[/bold cyan]",
@@ -135,8 +135,8 @@ class SearchDashboard:
             "Stage 1  LLM Seeding       [green]✓[/green]",
             f"Stage 2  Genetic Search    [{bar_str}] [bold yellow]{pct}%[/bold yellow]",
             f"         Generation:       [bold white]{stats.generation} / {stats.total_generations}[/bold white]",
-            f"         Baseline (-O3):   [dim]{b_ms} ms[/dim]",
-            f"         Current Best:     [bold green]{best_ms} ms[/bold green] (Speedup: [bold magenta]{speedup}[/bold magenta])",
+            f"         Baseline (-O3):   [dim]{b_ms_str}[/dim]",
+            f"         Current Best:     [bold green]{best_ms_str}[/bold green] (Speedup: [bold magenta]{speedup}[/bold magenta])",
             "Stage 3  Correctness Check [green]✓ Verified[/green]",
         ]
 
