@@ -44,6 +44,10 @@ class CompilerDriver:
         self.target_arch = target_arch or platform.machine()
         self.validator = PassValidator(opt_path=self.opt_path)
 
+        self.clang_version: str = "Clang 22.1"
+        self.opt_version: str = "Opt 22.1"
+
+
     def compile_bitcode(
         self,
         source_path: str,

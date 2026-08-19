@@ -106,11 +106,16 @@ class ExperimentManifestExporter:
             if baseline_result and baseline_result.metrics and baseline_result.metrics.samples_ns:
                 p_val = calculate_p_value(baseline_result.metrics.samples_ns, [winning_individual.fitness or b_ns] * 10)
 
+            b_ms = prescription.get("baseline_time_ms") if isinstance(prescription, dict) else getattr(prescription, "baseline_time_ms", 0.0)
+            c_ms = prescription.get("candidate_time_ms") if isinstance(prescription, dict) else getattr(prescription, "candidate_time_ms", 0.0)
+            sp_ratio = prescription.get("speedup_ratio") if isinstance(prescription, dict) else getattr(prescription, "speedup_ratio", 1.0)
+            repro_cmd = prescription.get("reproducible_clang_command") if isinstance(prescription, dict) else getattr(prescription, "reproducible_clang_command", "")
+
             best_data = {
                 "passes": winning_individual.sequence.passes,
-                "baseline_time_ms": prescription.baseline_time_ms,
-                "candidate_time_ms": prescription.candidate_time_ms,
-                "speedup_ratio": prescription.speedup_ratio,
+                "baseline_time_ms": b_ms,
+                "candidate_time_ms": c_ms,
+                "speedup_ratio": sp_ratio,
                 "p_value": p_val,
                 "statistically_significant": p_val < 0.05,
             }
@@ -118,12 +123,13 @@ class ExperimentManifestExporter:
                 json.dump(best_data, f, indent=2)
 
             with open(os.path.join(run_dir, "prescription.txt"), "w", encoding="utf-8") as f:
-                f.write(prescription.reproducible_clang_command + "\n")
+                f.write(str(repro_cmd) + "\n")
 
         # 5. benchmark_diff.svg ASCII representation
         with open(os.path.join(run_dir, "benchmark_diff.svg"), "w", encoding="utf-8") as f:
-            b_ms = prescription.baseline_time_ms if prescription else 0.0
-            c_ms = prescription.candidate_time_ms if prescription else 0.0
+            b_ms = prescription.get("baseline_time_ms", 0.0) if isinstance(prescription, dict) else getattr(prescription, "baseline_time_ms", 0.0) if prescription else 0.0
+            c_ms = prescription.get("candidate_time_ms", 0.0) if isinstance(prescription, dict) else getattr(prescription, "candidate_time_ms", 0.0) if prescription else 0.0
             f.write(f"<!-- Baseline: {b_ms} ms, Candidate: {c_ms} ms -->\n<svg xmlns='http://www.w3.org/2000/svg' width='400' height='100'><text x='10' y='30'>Baseline: {b_ms} ms</text><text x='10' y='70'>Candidate: {c_ms} ms</text></svg>\n")
+
 
         return run_dir

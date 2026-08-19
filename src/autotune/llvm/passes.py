@@ -1,14 +1,13 @@
 """
-LLVM Pass sequence representation, pass validation, and mutators.
+LLVM Pass sequence representation, pass validation, mutators, and conservative canonicalization.
 """
 
 import json
 import random
 import subprocess
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 from pydantic import BaseModel, Field
 
-# Standard LLVM optimization passes across function and loop vectorization/canonicalization
 KNOWN_VALID_PASSES: Set[str] = {
     "mem2reg",
     "gvn",
@@ -42,6 +41,31 @@ KNOWN_VALID_PASSES: Set[str] = {
     "memcpyopt",
 }
 
+# Known explicit pass aliases with verified LLVM equivalence
+PASS_ALIASES: Dict[str, str] = {
+    "scalarrepl": "sroa",
+    "promote": "mem2reg",
+    "loweratomic": "loweratomic",
+}
+
+
+class CanonicalPassNormalizer:
+    """
+    Conservatively normalizes LLVM pass sequences for cache indexing.
+    Syntactic canonicalization ONLY (whitespace normalization, alias resolution, deterministic formatting).
+    STRICTLY PROHIBITED: Pass reordering, pass deletion, pass collapsing, or idempotence assumptions.
+    """
+
+    @staticmethod
+    def canonicalize_pass_name(pass_name: str) -> str:
+        clean = pass_name.strip().lower()
+        return PASS_ALIASES.get(clean, clean)
+
+    @classmethod
+    def canonicalize_sequence(cls, sequence: "PassSequence") -> "PassSequence":
+        canonical_passes = [cls.canonicalize_pass_name(p) for p in sequence.passes if p.strip()]
+        return PassSequence(passes=canonical_passes)
+
 
 class PassSequence(BaseModel):
     """Ordered sequence of LLVM optimization passes."""
@@ -53,6 +77,11 @@ class PassSequence(BaseModel):
         from autotune.llvm.registry import LLVMPassRegistry
         registry = LLVMPassRegistry()
         return registry.construct_npm_pipeline_string(self)
+
+    def to_canonical_opt_string(self) -> str:
+        """Format canonicalized pass sequence string."""
+        canonical_seq = CanonicalPassNormalizer.canonicalize_sequence(self)
+        return canonical_seq.to_opt_string()
 
     def insert(self, pass_name: str, index: Optional[int] = None) -> "PassSequence":
         new_passes = list(self.passes)
@@ -132,11 +161,16 @@ class PassValidator:
             pass
 
     def is_valid_pass(self, pass_name: str) -> bool:
-        return pass_name in self.valid_passes
+        clean = CanonicalPassNormalizer.canonicalize_pass_name(pass_name)
+        return clean in self.valid_passes
 
     def validate_sequence(self, sequence: PassSequence) -> bool:
         return all(self.is_valid_pass(p) for p in sequence.passes)
 
     def filter_sequence(self, sequence: PassSequence) -> PassSequence:
-        valid_only = [p for p in sequence.passes if self.is_valid_pass(p)]
+        valid_only = [
+            CanonicalPassNormalizer.canonicalize_pass_name(p)
+            for p in sequence.passes
+            if self.is_valid_pass(p)
+        ]
         return PassSequence(passes=valid_only)

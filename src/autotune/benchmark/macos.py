@@ -1,5 +1,5 @@
 """
-MacOS high-precision timing performance measurement backend.
+MacOS high-precision timing performance measurement backend with drift protection.
 """
 
 import math
@@ -44,8 +44,8 @@ class MacOSPerformanceRunner(PerformanceRunner):
         last_stdout = ""
         last_stderr = ""
 
-        # Perform 3 warmup runs to stabilize CPU caches & dynamic frequency scaling
-        for _ in range(max(3, warmup_runs)):
+        # Perform warmup runs to stabilize CPU caches & dynamic frequency scaling
+        for _ in range(max(1, warmup_runs)):
             warmup = executor.execute(
                 binary_path, workload_path=workload_path, timeout_seconds=timeout_seconds
             )
@@ -59,6 +59,8 @@ class MacOSPerformanceRunner(PerformanceRunner):
                         measurement_backend="macOS high-precision timing",
                         cpu_info=self.cpu_info,
                         sample_count=0,
+                        warmup_runs=warmup_runs,
+                        measured_runs=repetitions,
                         noise_ratio=0.0,
                         is_fallback_measurement=True,
                     ),
@@ -86,6 +88,8 @@ class MacOSPerformanceRunner(PerformanceRunner):
                         measurement_backend="macOS high-precision timing",
                         cpu_info=self.cpu_info,
                         sample_count=len(samples_ns),
+                        warmup_runs=warmup_runs,
+                        measured_runs=repetitions,
                         noise_ratio=0.0,
                         is_fallback_measurement=True,
                     ),
@@ -107,6 +111,8 @@ class MacOSPerformanceRunner(PerformanceRunner):
             float(statistics.stdev(samples_ns)) if len(samples_ns) > 1 else 0.0
         )
         noise_ratio = stddev_val / median_val if median_val > 0 else 0.0
+        cv = stddev_val / mean_val if mean_val > 0 else 0.0
+        timing_warning = cv > 0.15
 
         # Calculate IQR noise
         if len(samples_ns) >= 4:
@@ -127,10 +133,10 @@ class MacOSPerformanceRunner(PerformanceRunner):
             max_time_ns=max_val,
             stddev_time_ns=stddev_val,
             noise_ratio=noise_ratio,
+            coefficient_of_variation=cv,
+            timing_stability_warning=timing_warning,
             iqr_time_ns=iqr_val,
             iqr_noise_ratio=iqr_ratio,
-            cycles=None,  # Do not fake hardware counters on macOS!
-            instructions=None,
         )
 
         metadata = BenchmarkEnvironmentMetadata(
@@ -140,7 +146,11 @@ class MacOSPerformanceRunner(PerformanceRunner):
             measurement_backend="macOS high-precision timing",
             cpu_info=self.cpu_info,
             sample_count=repetitions,
+            warmup_runs=warmup_runs,
+            measured_runs=repetitions,
             noise_ratio=noise_ratio,
+            coefficient_of_variation=cv,
+            timing_stability_warning=timing_warning,
             is_fallback_measurement=True,
         )
 

@@ -1,46 +1,63 @@
-# Autotune Development Guide
+# Development Guide
 
-## Prerequisites
+This guide covers setting up the development environment, code style guidelines, repository layout, and CI/CD pipelines.
 
-- macOS (Apple Silicon or Intel) or Linux
-- Python 3.11+
-- LLVM / Clang toolchain installed (`clang` and `opt`)
+---
 
-On macOS via Homebrew:
-```bash
-brew install llvm python@3.11
-```
+## 💻 Environment Setup
 
-## Setup Environment
+Clone the repository and install development dependencies:
 
 ```bash
-/opt/homebrew/bin/python3.11 -m venv .venv
+git clone https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor.git
+cd Autotune-The-Phase-Ordering-CLI-Doctor
+
+python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-## Running Tests
+Dev dependencies (`pyproject.toml`):
+- `pytest`, `pytest-cov` (Test suite & coverage)
+- `black`, `isort`, `flake8` (Code formatting & linting)
+- `mypy` (Static type checking)
 
-Run the full pytest suite:
+---
 
-```bash
-pytest -v
+## 📁 Repository Layout
+
+```text
+autotune/
+├── src/autotune/
+│   ├── analysis/       # AST & feature extraction (features.py)
+│   ├── benchmark/      # Timing backends, models, correctness (macos.py, correctness.py)
+│   ├── doctor/         # Diagnostic checks (checks.py, errors.py)
+│   ├── llm/            # LLM client & schema prompts (client.py, models.py)
+│   ├── llvm/           # Pass validation, compiler driver (passes.py, compiler.py)
+│   ├── reporting/      # Manifest & report exporters (manifest.py, report.py)
+│   ├── sandbox/        # Process execution sandbox (executor.py)
+│   ├── search/         # GA engine, persistent cache, fitness, seeds (genetic.py, cache.py)
+│   ├── stress/         # Batch suite orchestrator (orchestrator.py)
+│   ├── ui/             # Terminal dashboards & formatting (terminal.py)
+│   ├── cli.py          # Typer CLI application entry point
+│   └── config.py       # Credential store & settings
+├── tests/
+│   ├── unit/           # Unit test modules (47 tests)
+│   └── integration/    # Integration test modules (4 tests)
+├── examples/           # Target example workloads (matrix_transpose, simple_loop)
+├── polybench/          # PolyBench/C benchmark suite kernels
+├── docs/               # Technical documentation library
+└── pyproject.toml      # Build metadata & dependency definitions
 ```
 
-Run unit tests only:
+---
 
-```bash
-pytest -v tests/unit/
-```
+## 🎨 Code Style & Standards
 
-Run integration tests only:
-
-```bash
-pytest -v tests/integration/
-```
-
-## Code Quality Standards
-
-- Maintain type hints across all Python functions.
-- Keep dependencies minimal (Typer, Rich, Pydantic, Pytest).
-- Do not create monolithic files; follow module separation under `src/autotune/`.
+- **Formatting**: Format code using `black` and `isort`:
+  ```bash
+  black src/ tests/
+  isort src/ tests/
+  ```
+- **Type Annotations**: Enforce type annotations on all public functions and classes (`mypy src/`).
+- **Docstrings**: Include Google-style docstrings for module exports and classes.

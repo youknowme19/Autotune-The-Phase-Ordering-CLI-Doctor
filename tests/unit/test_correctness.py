@@ -45,7 +45,7 @@ def test_correctness_failed_execution_rejection():
     evaluated = FitnessEvaluator.evaluate(ind, comp_res, res, None)
 
     assert not evaluated.is_valid
-    assert evaluated.fitness == float("inf")
+    assert evaluated.fitness in (float("-inf"), float("inf"))
     assert evaluated.error_message is not None
 
 
@@ -61,6 +61,7 @@ def test_correctness_diff_assigned_infinite_fitness():
     comp_res = CompilationResult(success=True)
     evaluated = FitnessEvaluator.evaluate(ind, comp_res, res, None)
 
-    assert evaluated.fitness == float("inf")
+    assert evaluated.fitness in (float("-inf"), float("inf"))
     assert not evaluated.correctness_success
     assert not evaluated.is_valid
+

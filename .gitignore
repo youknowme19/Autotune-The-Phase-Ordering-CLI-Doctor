@@ -56,9 +56,12 @@ htmlcov/
 *.exe
 *.bin
 *.json
+*.dot
 tmp/
 .autotune_cache/
 .autotune_runs/
+.autotune/
 polybench/
+
 
 

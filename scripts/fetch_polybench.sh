@@ -195,9 +195,136 @@ int main(void) {
 }
 EOF
 
-# 4. Input files for workloads
+# 4. gemm (Matrix Multiply: C = alpha*A*B + beta*C)
+cat << 'EOF' > "${POLYBENCH_DIR}/gemm.c"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <time.h>
+
+#define NI 128
+#define NJ 128
+#define NK 128
+
+static double A[NI][NK];
+static double B[NK][NJ];
+static double C[NI][NJ];
+static double alpha = 1.5;
+static double beta = 1.2;
+
+static inline uint64_t get_monotonic_time_ns(void) {
+#if defined(__APPLE__)
+    return clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+#endif
+}
+
+void kernel_gemm(void) {
+    for (int i = 0; i < NI; i++) {
+        for (int j = 0; j < NJ; j++) {
+            C[i][j] *= beta;
+        }
+        for (int k = 0; k < NK; k++) {
+            for (int j = 0; j < NJ; j++) {
+                C[i][j] += alpha * A[i][k] * B[k][j];
+            }
+        }
+    }
+}
+
+int main(void) {
+    int iterations = 20;
+    if (scanf("%d", &iterations) != 1) iterations = 20;
+
+    for (int i = 0; i < NI; i++) {
+        for (int j = 0; j < NK; j++) A[i][j] = (double)((i*j+1) % NI) / NI;
+        for (int j = 0; j < NJ; j++) C[i][j] = (double)((i*j+2) % NJ) / NJ;
+    }
+    for (int i = 0; i < NK; i++)
+        for (int j = 0; j < NJ; j++) B[i][j] = (double)((i*j+3) % NK) / NK;
+
+    uint64_t start = get_monotonic_time_ns();
+    for (int it = 0; it < iterations; it++) {
+        kernel_gemm();
+        __asm__ __volatile__("" ::: "memory");
+    }
+    uint64_t elapsed = get_monotonic_time_ns() - start;
+
+    printf("GEMM Check C[64][64]: %.4f\n", C[64][64]);
+    printf("__AUTOTUNE_TIME_NS__:%llu\n", (unsigned long long)elapsed);
+    return 0;
+}
+EOF
+
+# 5. bicg (BiCGStab Subkernel: s = A.p, q = A^T.r)
+cat << 'EOF' > "${POLYBENCH_DIR}/bicg.c"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <time.h>
+
+#define NX 256
+#define NY 256
+
+static double A[NX][NY];
+static double p[NY];
+static double r[NX];
+static double s[NY];
+static double q[NX];
+
+static inline uint64_t get_monotonic_time_ns(void) {
+#if defined(__APPLE__)
+    return clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+#endif
+}
+
+void kernel_bicg(void) {
+    for (int i = 0; i < NY; i++) s[i] = 0.0;
+    for (int i = 0; i < NX; i++) {
+        q[i] = 0.0;
+        for (int j = 0; j < NY; j++) {
+            s[j] += A[i][j] * r[i];
+            q[i] += A[i][j] * p[j];
+        }
+    }
+}
+
+int main(void) {
+    int iterations = 20;
+    if (scanf("%d", &iterations) != 1) iterations = 20;
+
+    for (int i = 0; i < NY; i++) p[i] = (double)(i % NY) / NY;
+    for (int i = 0; i < NX; i++) {
+        r[i] = (double)(i % NX) / NX;
+        for (int j = 0; j < NY; j++)
+            A[i][j] = (double)((i*(j+1)) % NX) / NX;
+    }
+
+    uint64_t start = get_monotonic_time_ns();
+    for (int it = 0; it < iterations; it++) {
+        kernel_bicg();
+        __asm__ __volatile__("" ::: "memory");
+    }
+    uint64_t elapsed = get_monotonic_time_ns() - start;
+
+    printf("BiCG Check s[128]: %.4f, q[128]: %.4f\n", s[128], q[128]);
+    printf("__AUTOTUNE_TIME_NS__:%llu\n", (unsigned long long)elapsed);
+    return 0;
+}
+EOF
+
+# Input files for workloads
 echo "10" > "${POLYBENCH_DIR}/2mm_input.txt"
 echo "10" > "${POLYBENCH_DIR}/cholesky_input.txt"
 echo "20" > "${POLYBENCH_DIR}/atax_input.txt"
+echo "20" > "${POLYBENCH_DIR}/gemm_input.txt"
+echo "20" > "${POLYBENCH_DIR}/bicg_input.txt"
 
 echo "=== PolyBench/C kernels created in ${POLYBENCH_DIR}/ ==="

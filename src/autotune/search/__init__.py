@@ -6,6 +6,7 @@ from autotune.search.fitness import FitnessEvaluator
 from autotune.search.genetic import GeneticAlgorithmEngine, SearchProgressStats
 from autotune.search.individual import Individual
 from autotune.search.mutation import Mutator
+from autotune.search.persistent_cache import PersistentCacheManager
 from autotune.search.population import Population
 from autotune.search.selection import Selector
 
@@ -17,4 +18,5 @@ __all__ = [
     "Selector",
     "GeneticAlgorithmEngine",
     "SearchProgressStats",
+    "PersistentCacheManager",
 ]

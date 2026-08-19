@@ -13,7 +13,12 @@ class BenchmarkEnvironmentMetadata(BaseModel):
     measurement_backend: str
     cpu_info: str
     sample_count: int
+    warmup_runs: int = 3
+    measured_runs: int = 10
     noise_ratio: float
+    coefficient_of_variation: float = 0.0
+    timing_stability_warning: bool = False
+    is_cached_timing: bool = False
     is_fallback_measurement: bool = False
 
 
@@ -25,9 +30,11 @@ class ExecutionMetrics(BaseModel):
     max_time_ns: float
     stddev_time_ns: float
     noise_ratio: float  # stddev / median
+    coefficient_of_variation: float = 0.0
+    timing_stability_warning: bool = False
     iqr_time_ns: Optional[float] = None  # Interquartile range (q75 - q25)
     iqr_noise_ratio: Optional[float] = None  # iqr / median
-    cycles: Optional[int] = None  # Hardware counter cycles (Linux perf, None on macOS)
+    cycles: Optional[int] = None
     instructions: Optional[int] = None
 
 
