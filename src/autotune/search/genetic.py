@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from autotune.benchmark import PerformanceRunner
 from autotune.benchmark.correctness import CorrectnessStrategy, CorrectnessValidator
-from autotune.benchmark.models import BenchmarkResult
+from autotune.benchmark.models import BenchmarkResult, ExecutionMetrics
 from autotune.llvm.compiler import CompilerDriver, CompilationResult
 from autotune.llvm.passes import PassSequence, CanonicalPassNormalizer
 from autotune.sandbox.executor import SandboxExecutionResult

@@ -12,7 +12,7 @@
 
 ## Release Status & Versioning
 
-- **PyPI Release (`v0.2.0`)**: Available via `pip install autotune-doctor==0.2.0`. Provides core `doctor`, `config`, `diagnose`, `search`, and `bench-suite` subcommands with hardened engine features (disaggregated atomic persistent cache, baseline-normalized fitness, seed archiving, multi-fidelity screening `--fidelity`, baseline gating `--baseline-gate`, and regression guarding `--fail-on-regression`).
+- **PyPI Release (`v0.2.1`)**: Available via `pip install autotune-doctor==0.2.1`. Provides core `doctor`, `config`, `diagnose`, `search`, and `bench-suite` subcommands with hardened engine features (disaggregated atomic persistent cache, baseline-normalized fitness, seed archiving, multi-fidelity screening `--fidelity`, baseline gating `--baseline-gate`, and regression guarding `--fail-on-regression`).
 
 ---
 
@@ -42,6 +42,8 @@ However, **compiler pass ordering is sensitive to code structure**:
 ## How Autotune Works
 
 Autotune executes an end-to-end multi-stage pipeline:
+
+![Autotune System Architecture](docs/images/architecture.svg)
 
 ```text
                C/C++ Source Code
