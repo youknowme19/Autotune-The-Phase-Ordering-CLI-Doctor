@@ -10,13 +10,13 @@
 
 ---
 
-## 📌 Release Status & Versioning
+## Release Status & Versioning
 
 - **PyPI Release (`v0.2.0`)**: Available via `pip install autotune-doctor==0.2.0`. Provides core `doctor`, `config`, `diagnose`, `search`, and `bench-suite` subcommands with hardened engine features (disaggregated atomic persistent cache, baseline-normalized fitness, seed archiving, multi-fidelity screening `--fidelity`, baseline gating `--baseline-gate`, and regression guarding `--fail-on-regression`).
 
 ---
 
-## 💡 What is Autotune?
+## What is Autotune?
 
 **Autotune** is an open-source command-line tool for developers and compiler engineers who want to extract maximum performance from C and C++ programs.
 
