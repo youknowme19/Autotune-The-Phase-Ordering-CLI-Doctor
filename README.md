@@ -12,8 +12,7 @@
 
 ## 📌 Release Status & Versioning
 
-- **Stable PyPI Release (`v0.1.0`)**: Available via `pip install autotune-doctor`. Provides core `doctor`, `config`, `diagnose`, `search`, and `bench-suite` subcommands.
-- **Current GitHub Development / Next Release (`v0.2.0-rc`)**: This branch (`main`) contains hardened search engine features (disaggregated atomic persistent cache, baseline-normalized fitness, seed archiving, multi-fidelity screening `--fidelity`, baseline gating `--baseline-gate`, and regression guarding `--fail-on-regression`).
+- **PyPI Release (`v0.2.0`)**: Available via `pip install autotune-doctor==0.2.0`. Provides core `doctor`, `config`, `diagnose`, `search`, and `bench-suite` subcommands with hardened engine features (disaggregated atomic persistent cache, baseline-normalized fitness, seed archiving, multi-fidelity screening `--fidelity`, baseline gating `--baseline-gate`, and regression guarding `--fail-on-regression`).
 
 ---
 
@@ -27,7 +26,7 @@ It combines structural C/C++ AST analysis, optional LLM seed proposal generation
 
 ---
 
-## 🎯 The Problem: Why LLVM Phase Ordering Matters
+## The Problem: Why LLVM Phase Ordering Matters
 
 When you compile C or C++ code with `clang -O3`, the compiler runs a fixed pipeline of over 100 optimization passes (such as loop unrolling, dead code elimination, constant propagation, and vectorization) in a pre-determined order.
 
@@ -40,7 +39,7 @@ However, **compiler pass ordering is sensitive to code structure**:
 
 ---
 
-## ⚙️ How Autotune Works
+## How Autotune Works
 
 Autotune executes an end-to-end multi-stage pipeline:
 
@@ -80,7 +79,7 @@ Autotune executes an end-to-end multi-stage pipeline:
 
 ---
 
-## 🚫 What Autotune Does NOT Do
+## What Autotune Does NOT Do
 
 1. **Does NOT rewrite your C/C++ source files**: Your original `.c` or `.cpp` source files remain untouched. Autotune optimizes code at the intermediate LLVM bitcode representation layer (`opt -passes='...'`).
 2. **Does NOT blindly trust LLMs**: AI models act strictly as seed proposal generators for Generation 0. They **never** directly declare a winner. Every candidate binary must compile cleanly, pass correctness validation, and prove performance gains under empirical benchmark timing.
@@ -88,7 +87,7 @@ Autotune executes an end-to-end multi-stage pipeline:
 
 ---
 
-## ⚡ Quick Start (60-Second Workflow)
+## Quick Start (60-Second Workflow)
 
 ### 1. Install via PyPI
 ```bash
@@ -119,7 +118,7 @@ autotune search ./examples/matrix_transpose/kernel.c \
 
 ---
 
-## 📦 Installation & System Requirements
+## Installation & System Requirements
 
 ### Prerequisites
 - **Python**: Version `3.11` or higher.
@@ -143,7 +142,7 @@ pip install -e ".[dev]"
 
 ---
 
-## 🏃 Your First Optimization Walkthrough
+## Your First Optimization Walkthrough
 
 Let's optimize a C matrix transpose kernel ([`examples/matrix_transpose/kernel.c`](file:///Volumes/SSD/autotune/examples/matrix_transpose/kernel.c)):
 
@@ -161,7 +160,7 @@ The Genetic Algorithm evaluates pass sequence proposals over 5 generations. Prom
 
 ---
 
-## 📥 Understanding Workloads (`--workload`)
+## Understanding Workloads (`--workload`)
 
 What is a workload?
 A workload is the input dataset, command-line parameters, or input file required by your C/C++ executable to run its compute loop.
@@ -180,7 +179,7 @@ autotune search standalone_kernel.c
 
 ---
 
-## 📊 Understanding Search Results
+## Understanding Search Results
 
 At the conclusion of a search, Autotune displays a terminal dashboard summary:
 
@@ -208,7 +207,7 @@ Reproducible Compiler Command:
 
 ---
 
-## 🔀 Execution Modes & LLM Configuration
+## Execution Modes & LLM Configuration
 
 Autotune supports three execution modes for candidate seed generation:
 
@@ -223,7 +222,7 @@ Runs 100% offline using deterministic AST heuristics and random seed 42. Require
 
 ---
 
-## 🛠️ Complete CLI Command Reference
+## Complete CLI Command Reference
 
 Autotune exposes 5 core subcommands:
 
@@ -259,7 +258,7 @@ autotune bench-suite SUITE_DIR [-p POPULATION] [-g GENERATIONS] [-s SEED] [-o OU
 
 ---
 
-## ⚙️ Search Configuration Parameters
+## Search Configuration Parameters
 
 Key options for `autotune search`:
 
@@ -280,7 +279,7 @@ Key options for `autotune search`:
 
 ---
 
-## 🛡️ Benchmarking & Correctness Validation
+## Benchmarking & Correctness Validation
 
 Every candidate pass sequence undergoes strict evaluation:
 
@@ -291,7 +290,7 @@ Every candidate pass sequence undergoes strict evaluation:
 
 ---
 
-## 📄 Exported JSON Search Reports (`--output-json`)
+## Exported JSON Search Reports (`--output-json`)
 
 When `--output-json` is specified, Autotune exports a structured diagnostic JSON report:
 
@@ -314,7 +313,7 @@ When `--output-json` is specified, Autotune exports a structured diagnostic JSON
 
 ---
 
-## 🔬 Validated Research Result (`matrix_transpose`)
+## Validated Research Result (`matrix_transpose`)
 
 In addition to user-facing optimization search capabilities, Autotune includes a frozen scientific confirmation manifest for researchers:
 
@@ -331,7 +330,7 @@ In addition to user-facing optimization search capabilities, Autotune includes a
 
 ---
 
-## ⚠️ Known Limitations
+## Known Limitations
 
 1. **Workload Dependence**: Pass sequences optimized for one code pattern (e.g., matrix transpose) may not improve or may regress on different code structures.
 2. **PolyBench Generalization**: On dense linear algebra loop kernels (PolyBench `2mm`, `cholesky`, `atax`, `gemm`, `bicg`), small offline GA budgets ($P=10, G=5$, `--no-llm`) produce performance regressions ($0.13x - 0.77x$) against Clang `-O3`, demonstrating honest regression detection.
@@ -339,7 +338,7 @@ In addition to user-facing optimization search capabilities, Autotune includes a
 
 ---
 
-## 📚 In-Depth Technical Documentation
+## In-Depth Technical Documentation
 
 Comprehensive architectural and engineering guides are available in the [`docs/`](docs/README.md) library:
 
@@ -367,7 +366,7 @@ Comprehensive architectural and engineering guides are available in the [`docs/`
 
 ---
 
-## 🤝 Community, Security & License
+## Community, Security & License
 
 - **Contributing**: Please review [`CONTRIBUTING.md`](CONTRIBUTING.md) before submitting pull requests.
 - **Security & Responsible Use**: Please review [`SECURITY.md`](SECURITY.md) for credential safety guidelines.
