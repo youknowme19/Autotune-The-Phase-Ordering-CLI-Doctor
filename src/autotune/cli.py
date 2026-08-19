@@ -27,6 +27,7 @@ from autotune.reporting.report import SearchReport
 from autotune.ui import SearchDashboard, print_banner, print_diagnose_summary, print_doctor_report, print_search_results_summary
 
 
+from autotune import __version__
 from autotune.sandbox import SandboxExecutor
 from autotune.search import GeneticAlgorithmEngine, SearchProgressStats, PersistentCacheManager
 from autotune.stress import BatchStressTestOrchestrator
@@ -39,10 +40,33 @@ app = typer.Typer(
 console = Console()
 
 
+def version_callback(value: bool):
+    if value:
+        console.print(f"autotune {__version__}")
+        raise typer.Exit()
+
+
+@app.callback(invoke_without_command=True)
+def main(
+    ctx: typer.Context,
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        "-V",
+        help="Show program version and exit.",
+        callback=version_callback,
+        is_eager=True,
+    ),
+):
+    """
+    AI-Guided LLVM Phase-Ordering CLI Doctor for C/C++ Workloads
+    """
+    pass
+
+
 @app.command()
 def doctor():
     """Run system diagnostics for LLVM, Clang, Opt, Python, and hardware backend environment."""
-    print_banner()
     report = run_doctor_checks()
     print_doctor_report(report)
 
@@ -64,7 +88,6 @@ def diagnose(
     workload: Optional[str] = typer.Option(None, "--workload", "-w", help="Path to workload input file"),
 ):
     """Analyze C/C++ source kernel AST, loop structures, and benchmark baseline -O3 execution."""
-    print_banner()
     if not os.path.exists(source):
         console.print(f"[bold red]Error: Source file '{source}' not found.[/bold red]")
         raise typer.Exit(code=1)

@@ -65,3 +65,40 @@ def test_correctness_diff_assigned_infinite_fitness():
     assert not evaluated.correctness_success
     assert not evaluated.is_valid
 
+
+def test_sandbox_executor_signal_error_propagation():
+    from unittest.mock import MagicMock, patch
+    from autotune.sandbox.executor import SandboxExecutor
+
+    executor = SandboxExecutor()
+
+    mock_proc = MagicMock()
+    mock_proc.returncode = -11  # SIGSEGV
+    mock_proc.communicate.return_value = ("", "Segmentation fault (core dumped)")
+
+    with patch("subprocess.Popen", return_value=mock_proc), patch("os.path.exists", return_value=True):
+        res = executor.execute("/fake/path/binary")
+        assert not res.success
+        assert res.exit_code == -11
+        assert res.error_message is not None
+        assert "SIGSEGV" in res.error_message
+        assert "Segmentation fault" in res.error_message
+
+
+def test_sandbox_executor_positive_signal_error_propagation():
+    from unittest.mock import MagicMock, patch
+    from autotune.sandbox.executor import SandboxExecutor
+
+    executor = SandboxExecutor()
+
+    mock_proc = MagicMock()
+    mock_proc.returncode = 133  # 128 + 5 = SIGTRAP
+    mock_proc.communicate.return_value = ("", "Trace/breakpoint trap")
+
+    with patch("subprocess.Popen", return_value=mock_proc), patch("os.path.exists", return_value=True):
+        res = executor.execute("/fake/path/binary")
+        assert not res.success
+        assert res.exit_code == 133
+        assert res.error_message is not None
+        assert "SIGTRAP" in res.error_message
+        assert "Trace/breakpoint trap" in res.error_message

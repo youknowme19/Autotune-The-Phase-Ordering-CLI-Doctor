@@ -68,12 +68,35 @@ class SandboxExecutor:
             )
 
             stdout, stderr = proc.communicate(input=stdin_data, timeout=timeout)
+
+            err_msg: Optional[str] = None
+            if proc.returncode != 0:
+                import signal
+
+                sig_details = ""
+                if proc.returncode < 0:
+                    try:
+                        sig_details = f" ({signal.Signals(-proc.returncode).name})"
+                    except Exception:
+                        sig_details = ""
+                elif proc.returncode > 128:
+                    signum = proc.returncode - 128
+                    try:
+                        sig_details = f" ({signal.Signals(signum).name})"
+                    except Exception:
+                        sig_details = ""
+
+                err_msg = f"Executable exited with non-zero return code {proc.returncode}{sig_details}."
+                if stderr and stderr.strip():
+                    err_msg += f" Stderr: {stderr.strip()}"
+
             return SandboxExecutionResult(
                 success=(proc.returncode == 0),
                 stdout=stdout or "",
                 stderr=stderr or "",
                 exit_code=proc.returncode,
                 timed_out=False,
+                error_message=err_msg,
             )
 
         except subprocess.TimeoutExpired:

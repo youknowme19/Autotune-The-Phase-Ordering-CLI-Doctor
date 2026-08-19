@@ -88,7 +88,7 @@ class LinuxPerformanceRunner(PerformanceRunner):
                     stdout=warmup.stdout,
                     stderr=warmup.stderr,
                     exit_code=warmup.exit_code,
-                    error_message=f"Warmup execution failed: {warmup.error_message}",
+                    error_message=f"Warmup execution failed: {warmup.error_message or f'Process exited with return code {warmup.exit_code}'}",
                 )
 
         # Timed measurement runs
@@ -115,7 +115,7 @@ class LinuxPerformanceRunner(PerformanceRunner):
                     stdout=res.stdout,
                     stderr=res.stderr,
                     exit_code=res.exit_code,
-                    error_message=f"Benchmark execution failed: {res.error_message}",
+                    error_message=f"Benchmark execution failed: {res.error_message or f'Process exited with return code {res.exit_code}'}",
                 )
 
             samples_ns.append(end - start)

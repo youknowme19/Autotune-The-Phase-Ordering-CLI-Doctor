@@ -165,15 +165,20 @@ The Genetic Algorithm evaluates pass sequence proposals over 5 generations. Prom
 What is a workload?
 A workload is the input dataset, command-line parameters, or input file required by your C/C++ executable to run its compute loop.
 
-- **When `--workload` (`-w`) is supplied**: Autotune redirects the file contents to the candidate program's `stdin` during both baseline diagnosis and candidate benchmarking.
-- **When `--workload` is omitted**: Autotune runs the executable directly without input redirection.
+- **When `--workload` (`-w`) is supplied**: Autotune redirects the file contents directly to the candidate program's `stdin` during both baseline diagnosis and candidate benchmarking.
+- **When `--workload` is omitted**: Autotune executes the program binary directly without input redirection.
+
+> **Execution Model Note**: Autotune currently supports self-contained C/C++ kernels or programs that receive workload data via `stdin`. If your program requires command-line `argv` arguments or crashes at runtime (e.g. due to buffer overflow fortification `SIGTRAP` / exit code 133), Autotune will report an explicit diagnostic indicating non-zero process exit codes rather than failing silently.
 
 Example:
 ```bash
-# Workload provided via input file
+# Display version
+autotune --version
+
+# Workload provided via input file (redirected to stdin)
 autotune search kernel.c -w input_params.txt
 
-# Workload embedded inside C source main()
+# Standalone kernel (no stdin workload required)
 autotune search standalone_kernel.c
 ```
 
