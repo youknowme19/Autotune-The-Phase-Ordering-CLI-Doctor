@@ -4,6 +4,7 @@ Compiler prescription builder for reproducible build commands.
 
 from typing import List, Optional
 from pydantic import BaseModel
+from autotune.benchmark.models import ResultClassification
 from autotune.llvm.passes import PassSequence
 
 
@@ -14,6 +15,7 @@ class CompilerPrescription(BaseModel):
     baseline_time_ms: float
     candidate_time_ms: float
     speedup_ratio: float
+    classification: ResultClassification = ResultClassification.IMPROVED
 
 
 class PrescriptionBuilder:
@@ -42,6 +44,15 @@ class PrescriptionBuilder:
         c_ms = round(candidate_time_ns / 1e6, 3)
         speedup = round(baseline_time_ns / candidate_time_ns, 2) if candidate_time_ns > 0 else 1.0
 
+        if candidate_time_ns <= 0 or baseline_time_ns <= 0:
+            classification = ResultClassification.NO_VALID_CANDIDATE
+        elif speedup >= 1.02:
+            classification = ResultClassification.IMPROVED
+        elif speedup >= 0.98:
+            classification = ResultClassification.TIE
+        else:
+            classification = ResultClassification.REGRESSION
+
         return CompilerPrescription(
             pass_sequence=pass_sequence,
             reproducible_clang_command=clang_cmd,
@@ -49,4 +60,5 @@ class PrescriptionBuilder:
             baseline_time_ms=b_ms,
             candidate_time_ms=c_ms,
             speedup_ratio=speedup,
+            classification=classification,
         )

@@ -143,12 +143,13 @@ def search(
     provider: str = typer.Option("openai", "--provider", help="LLM Provider [openai|anthropic|gemini]"),
     correctness_strategy: str = typer.Option("exitcode", "--correctness-strategy", help="Strategy [exitcode|numeric|filedigest|custom]"),
     output_json: Optional[str] = typer.Option(None, "--output-json", "-o", help="Path to export structured JSON search report"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Non-interactive quiet mode for CI logging"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
 ):
     """Run AI-guided genetic algorithm search for optimal LLVM pass pipelines with multi-layer caching."""
     if not os.path.exists(source):
         console.print(f"[bold red]Error: Source file '{source}' not found.[/bold red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=2)
 
     api_key = CredentialStore.get_api_key(provider)
     use_llm_mode = False
@@ -157,20 +158,25 @@ def search(
         if not api_key:
             console.print(f"[bold red][ERROR] --llm requested but no API key found for provider '{provider}'.[/bold red]")
             console.print("[yellow]Run 'autotune config' or set OPENAI_API_KEY / AUTOTUNE_LLM_API_KEY.[/yellow]")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=2)
         use_llm_mode = True
     elif llm is False:
         use_llm_mode = False
     else:
         if api_key:
             use_llm_mode = True
-            if verbose:
+            if verbose and not quiet:
                 console.print(f"[dim][INFO] API key detected for provider '{provider}'. Running AI-guided search.[/dim]")
         else:
             use_llm_mode = False
-            console.print("[dim][INFO] No LLM API key detected. Running offline heuristic search.[/dim]")
+            if not quiet:
+                console.print("[dim][INFO] No LLM API key detected. Running offline heuristic search.[/dim]")
 
     doc_report = run_doctor_checks()
+    if not doc_report.clang_ok:
+        console.print(f"[bold red][ERROR] Clang compiler not found on system PATH.[/bold red]")
+        raise typer.Exit(code=3)
+
     compiler = CompilerDriver(clang_path=doc_report.clang_path, opt_path=doc_report.opt_path)
     runner = get_performance_runner(
         platform_name=doc_report.os_name,
@@ -195,12 +201,14 @@ def search(
     llm_client = get_llm_client(provider=provider, use_llm=use_llm_mode, api_key=api_key, validator=compiler.validator)
     seed_sequences = llm_client.generate_candidates(features, count=4)
 
-    dashboard = SearchDashboard(
-        total_generations=generations,
-        source_filename=os.path.basename(source),
-        use_llm=use_llm_mode,
-    )
-    dashboard.start()
+    dashboard = None
+    if not quiet:
+        dashboard = SearchDashboard(
+            total_generations=generations,
+            source_filename=os.path.basename(source),
+            use_llm=use_llm_mode,
+        )
+        dashboard.start()
 
     with tempfile.TemporaryDirectory() as tmpdir:
         base_bin = os.path.join(tmpdir, "baseline.bin")
@@ -230,7 +238,12 @@ def search(
         )
 
         def on_progress(stats: SearchProgressStats) -> None:
-            dashboard.update(stats)
+            if dashboard:
+                dashboard.update(stats)
+            elif quiet:
+                best_ms = f"{round(stats.best_fitness_ns / 1e6, 3)} ms" if stats.best_fitness_ns is not None else "N/A"
+                spd = f"{stats.speedup_factor:.2f}x" if stats.speedup_factor is not None else "N/A"
+                console.print(f"[Generation {stats.generation}/{stats.total_generations}] Best: {best_ms} | Speedup: {spd} | Valid: {stats.valid_candidates_count}")
 
         pop = engine.evolve(
             source_path=source,
@@ -269,9 +282,11 @@ def search(
                 baseline_time_ns=base_time,
                 candidate_time_ns=best.raw_time_ns,
             )
-            print_search_results_summary(prescription)
-
-
+            print_search_results_summary(
+                prescription=prescription,
+                cache_hits=cache_mgr.cache_hits,
+                cache_misses=cache_mgr.cache_misses,
+            )
 
             # Regression Guard
             conf_speedup = final_confirmation.get("final_confirmation_speedup", 1.0)
@@ -294,7 +309,8 @@ def search(
             winning_individual=best,
             prescription=prescription,
         )
-        console.print(f"[dim]Run artifacts saved to {manifest_dir}/[/dim]")
+        if not quiet:
+            console.print(f"[dim]Run artifacts saved to {manifest_dir}/[/dim]")
 
         if output_json:
             report = SearchReport(
@@ -309,6 +325,61 @@ def search(
             )
             report.export_json(output_json)
             console.print(f"[green]Report exported to {output_json}[/green]")
+
+
+@app.command()
+def export(
+    report_json: str = typer.Argument(..., help="Path to JSON search report file exported by autotune search"),
+    output_dir: str = typer.Option("./autotune_prescription", "--output-dir", "-o", help="Output directory path for prescription assets"),
+):
+    """Export reproducible prescription scripts and manifests from a JSON search report."""
+    if not os.path.exists(report_json):
+        console.print(f"[bold red]Error: Report JSON file '{report_json}' not found.[/bold red]")
+        raise typer.Exit(code=2)
+
+    with open(report_json, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    prescription_data = data.get("prescription")
+    if not prescription_data:
+        console.print(f"[bold yellow]Warning: No prescription data found in report JSON '{report_json}'.[/bold yellow]")
+        raise typer.Exit(code=2)
+
+    os.makedirs(output_dir, exist_ok=True)
+    
+    txt_path = os.path.join(output_dir, "prescription.txt")
+    sh_path = os.path.join(output_dir, "reproduce.sh")
+    json_path = os.path.join(output_dir, "prescription.json")
+
+    cmd = prescription_data.get("reproducible_clang_command", "")
+    passes = prescription_data.get("pass_sequence", {}).get("passes", [])
+
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write("AUTOTUNE COMPILER PRESCRIPTION\n")
+        f.write("==============================\n")
+        f.write(f"Source Path:     {data.get('source_path', 'N/A')}\n")
+        f.write(f"Speedup Ratio:   {prescription_data.get('speedup_ratio', 1.0)}x\n")
+        f.write(f"Pass Sequence:   {passes}\n\n")
+        f.write("Reproducible Compiler Command:\n")
+        f.write(f"{cmd}\n")
+
+    with open(sh_path, "w", encoding="utf-8") as f:
+        f.write("#!/bin/bash\n")
+        f.write("# Autotune Reproducible Build Script\n")
+        f.write("set -euo pipefail\n\n")
+        f.write(f"echo 'Building optimized binary with pass sequence: {passes}'\n")
+        f.write(f"{cmd}\n")
+        f.write("echo 'Build complete: optimized_kernel.bin created.'\n")
+
+    os.chmod(sh_path, 0o755)
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(prescription_data, f, indent=2)
+
+    console.print(f"[bold green]Successfully exported prescription assets to directory '{output_dir}/':[/bold green]")
+    console.print(f"  - [cyan]{txt_path}[/cyan] (Text summary)")
+    console.print(f"  - [cyan]{sh_path}[/cyan] (Executable build script)")
+    console.print(f"  - [cyan]{json_path}[/cyan] (JSON metadata)")
 
 
 @app.command(name="bench-suite")

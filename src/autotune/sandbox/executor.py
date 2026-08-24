@@ -69,6 +69,13 @@ class SandboxExecutor:
 
             stdout, stderr = proc.communicate(input=stdin_data, timeout=timeout)
 
+            # Enforce max 10MB stream buffer cap to prevent OOM on runaway logging
+            MAX_STREAM_BYTES = 10 * 1024 * 1024
+            if stdout and len(stdout) > MAX_STREAM_BYTES:
+                stdout = stdout[:MAX_STREAM_BYTES] + "\n[TRUNCATED: stdout exceeded 10MB limit]"
+            if stderr and len(stderr) > MAX_STREAM_BYTES:
+                stderr = stderr[:MAX_STREAM_BYTES] + "\n[TRUNCATED: stderr exceeded 10MB limit]"
+
             err_msg: Optional[str] = None
             if proc.returncode != 0:
                 import signal
@@ -88,7 +95,7 @@ class SandboxExecutor:
 
                 err_msg = f"Executable exited with non-zero return code {proc.returncode}{sig_details}."
                 if stderr and stderr.strip():
-                    err_msg += f" Stderr: {stderr.strip()}"
+                    err_msg += f" Stderr: {stderr.strip()[:1000]}"
 
             return SandboxExecutionResult(
                 success=(proc.returncode == 0),

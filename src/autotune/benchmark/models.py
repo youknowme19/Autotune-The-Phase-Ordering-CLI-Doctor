@@ -2,8 +2,16 @@
 Benchmark models and structured measurement metadata.
 """
 
+from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel, Field
+
+
+class ResultClassification(str, Enum):
+    IMPROVED = "IMPROVED"
+    TIE = "NO_SIGNIFICANT_CHANGE"
+    REGRESSION = "REGRESSION"
+    NO_VALID_CANDIDATE = "NO_VALID_CANDIDATE"
 
 
 class BenchmarkEnvironmentMetadata(BaseModel):
