@@ -39,6 +39,7 @@ class SearchProgressStats(BaseModel):
     valid_candidates_count: int
     unique_candidates_count: int = 0
     duplicate_suppression_count: int = 0
+    diversity_ratio: float = 1.0
     persistent_compilation_cache_hits: int = 0
     persistent_correctness_cache_hits: int = 0
     persistent_performance_cache_hits: int = 0
@@ -325,7 +326,7 @@ class GeneticAlgorithmEngine:
         workload_path: Optional[str],
         baseline_res: SandboxExecutionResult,
         baseline_time_ns: float,
-        initial_sequences: List[PassSequence],
+        initial_sequences: Optional[List[PassSequence]] = None,
         callback: Optional[Callable[[SearchProgressStats], None]] = None,
     ) -> Population:
         """Run GA optimization with elite preservation, multi-fidelity screening, and resumable state snapshots."""
@@ -335,7 +336,7 @@ class GeneticAlgorithmEngine:
         early_stop_triggered = False
 
         start_gen = 0
-        pop = self.initialize_population(initial_sequences)
+        pop = self.initialize_population(initial_sequences or [])
 
         exp_dir = os.path.join(os.getcwd(), ".autotune", "experiments")
         os.makedirs(exp_dir, exist_ok=True)
@@ -418,6 +419,7 @@ class GeneticAlgorithmEngine:
                 if callback:
                     valid_cnt = sum(1 for ind in pop.individuals if ind.is_valid)
                     unique_hashes = len({self.get_sequence_hash(ind.sequence) for ind in pop.individuals})
+                    div_ratio = round(unique_hashes / max(len(pop.individuals), 1), 2)
                     stats = SearchProgressStats(
                         generation=gen + 1,
                         total_generations=self.generations,
@@ -427,6 +429,7 @@ class GeneticAlgorithmEngine:
                         valid_candidates_count=valid_cnt,
                         unique_candidates_count=unique_hashes,
                         duplicate_suppression_count=self.population_size - unique_hashes,
+                        diversity_ratio=div_ratio,
                         persistent_compilation_cache_hits=self.cache_mgr.metrics.persistent_compilation_cache_hits,
                         persistent_correctness_cache_hits=self.cache_mgr.metrics.persistent_correctness_cache_hits,
                         persistent_performance_cache_hits=self.cache_mgr.metrics.persistent_performance_cache_hits,
@@ -450,6 +453,7 @@ class GeneticAlgorithmEngine:
                         fitness=e.fitness,
                         raw_time_ns=e.raw_time_ns,
                         normalized_speed=e.normalized_speed,
+                        origin=getattr(e, "origin", "elite"),
                     ))
 
                 unique_ratio = len({self.get_sequence_hash(ind.sequence) for ind in pop.individuals}) / self.population_size
@@ -460,10 +464,12 @@ class GeneticAlgorithmEngine:
                     p1 = self.selector.tournament_select(pop.individuals, k=3)
                     p2 = self.selector.tournament_select(pop.individuals, k=3)
 
+                    cand_origin = "mutation"
                     if self.rng.random() < self.crossover_rate and len(p1.sequence.passes) > 1 and len(p2.sequence.passes) > 1:
                         pt1 = self.rng.randint(0, len(p1.sequence.passes))
                         pt2 = self.rng.randint(0, len(p2.sequence.passes))
                         child_seq = p1.sequence.crossover(p2.sequence, pt1, pt2)
+                        cand_origin = "crossover"
                     else:
                         child_seq = p1.sequence
 
@@ -472,7 +478,7 @@ class GeneticAlgorithmEngine:
 
                     if child_hash not in seen_hashes or len(new_individuals) > self.population_size // 2:
                         seen_hashes.add(child_hash)
-                        new_individuals.append(Individual(sequence=child_seq))
+                        new_individuals.append(Individual(sequence=child_seq, origin=cand_origin))
 
                 pop.individuals = new_individuals[: self.population_size]
 

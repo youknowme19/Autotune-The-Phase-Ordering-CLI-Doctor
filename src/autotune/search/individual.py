@@ -21,6 +21,7 @@ class Individual(BaseModel):
     correctness_success: bool = True
     error_message: Optional[str] = None
     is_cached_timing: bool = False
+    origin: str = "random"  # Provenance: heuristic, llm, random, mutation, crossover
 
     @property
     def raw_pipeline(self) -> str:

@@ -125,6 +125,13 @@ class MacOSPerformanceRunner(PerformanceRunner):
             iqr_val = 0.0
             iqr_ratio = 0.0
 
+        # Calculate 95% Confidence Interval
+        n_samples = len(samples_ns)
+        import math
+        ci95_margin = 1.96 * (stddev_val / math.sqrt(n_samples)) if (n_samples > 1 and stddev_val > 0) else 0.0
+        ci95_lower = max(0.0, mean_val - ci95_margin)
+        ci95_upper = mean_val + ci95_margin
+
         metrics = ExecutionMetrics(
             samples_ns=samples_ns,
             median_time_ns=median_val,
@@ -137,6 +144,8 @@ class MacOSPerformanceRunner(PerformanceRunner):
             timing_stability_warning=timing_warning,
             iqr_time_ns=iqr_val,
             iqr_noise_ratio=iqr_ratio,
+            ci95_lower_time_ns=ci95_lower,
+            ci95_upper_time_ns=ci95_upper,
         )
 
         metadata = BenchmarkEnvironmentMetadata(

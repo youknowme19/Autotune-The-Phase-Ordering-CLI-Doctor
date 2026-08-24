@@ -123,6 +123,7 @@ def search(
     seed: Optional[int] = typer.Option(42, "--seed", "-s", help="Random seed for deterministic search"),
     resume: Optional[str] = typer.Option(None, "--resume", help="Resume experiment run state from snapshot ID"),
     early_stop: Optional[int] = typer.Option(None, "--early-stop", help="Stop search early if no improvement after N stagnant generations"),
+    time_budget: Optional[float] = typer.Option(None, "--time-budget", help="Maximum wall-clock search time limit in seconds"),
     workers: int = typer.Option(4, "--workers", help="Number of parallel evaluation workers"),
     # Benchmarking Options
     warmup: int = typer.Option(3, "--warmup", help="Number of warmup runs per benchmark"),
@@ -226,6 +227,7 @@ def search(
             population_size=population,
             generations=generations,
             max_stagnant_generations=early_stop if early_stop else 10,
+            max_search_time_seconds=time_budget,
             correctness_strategy=strat,
             max_workers=workers,
             cache_manager=cache_mgr,

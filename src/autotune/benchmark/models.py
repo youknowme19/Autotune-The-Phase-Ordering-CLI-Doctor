@@ -42,6 +42,8 @@ class ExecutionMetrics(BaseModel):
     timing_stability_warning: bool = False
     iqr_time_ns: Optional[float] = None  # Interquartile range (q75 - q25)
     iqr_noise_ratio: Optional[float] = None  # iqr / median
+    ci95_lower_time_ns: Optional[float] = None  # 95% CI lower bound
+    ci95_upper_time_ns: Optional[float] = None  # 95% CI upper bound
     cycles: Optional[int] = None
     instructions: Optional[int] = None
 
