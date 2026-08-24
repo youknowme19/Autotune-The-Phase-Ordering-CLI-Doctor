@@ -7,6 +7,7 @@ from typing import Optional
 from pydantic import BaseModel
 from autotune.benchmark.models import BenchmarkResult
 from autotune.doctor.checks import DoctorReport
+from autotune.analysis.profile import WorkloadProfile
 from autotune.reporting.prescription import CompilerPrescription
 
 
@@ -24,6 +25,7 @@ class SearchReport(BaseModel):
     source_path: str
     workload_path: Optional[str] = None
     doctor_report: DoctorReport
+    workload_profile: Optional[WorkloadProfile] = None
     baseline_result: Optional[BenchmarkResult] = None
     prescription: Optional[CompilerPrescription] = None
     generations_searched: int

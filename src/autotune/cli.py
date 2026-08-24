@@ -197,6 +197,14 @@ def search(
     extractor = FeatureExtractor(clang_path=doc_report.clang_path)
     features = extractor.extract_from_file(source)
 
+    from autotune.analysis.profile import WorkloadProfiler
+    profiler = WorkloadProfiler(clang_path=doc_report.clang_path)
+    w_profile = profiler.profile_file(
+        source_path=source,
+        architecture=doc_report.arch,
+        compiler_version=doc_report.clang_version or "Clang",
+    )
+
     strat = ExitCodeAndStdoutStderrValidator()
     if correctness_strategy == "numeric":
         strat = NumericToleranceValidator()
@@ -321,6 +329,7 @@ def search(
                 source_path=source,
                 workload_path=workload,
                 doctor_report=doc_report,
+                workload_profile=w_profile,
                 baseline_result=base_bench,
                 prescription=prescription,
                 generations_searched=generations,
