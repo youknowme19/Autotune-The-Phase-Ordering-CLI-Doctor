@@ -22,6 +22,7 @@ from autotune.doctor import run_doctor_checks
 from autotune.analysis import FeatureExtractor
 from autotune.llm import get_llm_client
 from autotune.llvm import CompilerDriver, PipelineBuilder
+from autotune.llvm.passes import PassSequence
 from autotune.reporting.manifest import ExperimentManifestExporter
 from autotune.reporting.report import SearchReport
 from autotune.ui import SearchDashboard, print_banner, print_diagnose_summary, print_doctor_report, print_search_results_summary
@@ -117,6 +118,7 @@ def diagnose(
 def search(
     source: str = typer.Argument(..., help="Path to C/C++ source kernel file"),
     workload: Optional[str] = typer.Option(None, "--workload", "-w", help="Path to workload input file"),
+    args: Optional[str] = typer.Option(None, "--args", help="Space-separated command-line arguments passed via argv"),
     # Search Options
     generations: int = typer.Option(5, "--generations", "-g", help="GA generation count"),
     population: int = typer.Option(10, "--population", "-p", help="GA population size"),
@@ -420,6 +422,42 @@ def bench_suite(
     console.print(f"Silent Miscompilations: [bold red]{report.silent_miscompilations}[/bold red]")
     console.print(f"\nOverall Suite Speedup:  [bold magenta]{report.overall_suite_speedup}x[/bold magenta]")
     console.print(f"Report exported to:     [bold cyan]{output_report}[/bold cyan]\n")
+
+
+@app.command()
+def explain(
+    target: str = typer.Argument(..., help="Comma-separated LLVM pass sequence string or JSON search report filepath"),
+):
+    """Inspect and explain the optimization semantics and expected impact of an LLVM pass pipeline."""
+    from autotune.reporting.explain import PipelineInspector
+    from rich.table import Table
+
+    passes_list: List[str] = []
+    if os.path.exists(target) and target.endswith(".json"):
+        with open(target, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        passes_list = data.get("prescription", {}).get("pass_sequence", {}).get("passes", [])
+    else:
+        passes_list = [p.strip() for p in target.replace(",", " ").split() if p.strip()]
+
+    if not passes_list:
+        console.print(f"[bold red]Error: No valid LLVM passes provided to explain.[/bold red]")
+        raise typer.Exit(code=2)
+
+    seq = PassSequence(passes=passes_list)
+    inspector = PipelineInspector()
+    explanations = inspector.explain(seq)
+
+    table = Table(title="LLVM Pass Pipeline Explanation & Optimization Domains", border_style="cyan")
+    table.add_column("Pass Name", style="bold white")
+    table.add_column("Optimization Domain", style="bold cyan")
+    table.add_column("Description", style="white")
+    table.add_column("Expected Impact", style="bold green")
+
+    for exp in explanations:
+        table.add_row(exp.pass_name, exp.domain, exp.description, exp.expected_impact)
+
+    console.print(table)
 
 
 def main():

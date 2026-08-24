@@ -35,6 +35,7 @@ class MacOSPerformanceRunner(PerformanceRunner):
         self,
         binary_path: str,
         workload_path: Optional[str] = None,
+        binary_args: Optional[List[str]] = None,
         repetitions: int = 10,
         timeout_seconds: float = 5.0,
         warmup_runs: int = 3,
@@ -47,7 +48,7 @@ class MacOSPerformanceRunner(PerformanceRunner):
         # Perform warmup runs to stabilize CPU caches & dynamic frequency scaling
         for _ in range(max(1, warmup_runs)):
             warmup = executor.execute(
-                binary_path, workload_path=workload_path, timeout_seconds=timeout_seconds
+                binary_path, workload_path=workload_path, binary_args=binary_args, timeout_seconds=timeout_seconds
             )
             if not warmup.success:
                 return BenchmarkResult(
@@ -74,7 +75,7 @@ class MacOSPerformanceRunner(PerformanceRunner):
         for _ in range(repetitions):
             start = time.perf_counter_ns()
             res = executor.execute(
-                binary_path, workload_path=workload_path, timeout_seconds=timeout_seconds
+                binary_path, workload_path=workload_path, binary_args=binary_args, timeout_seconds=timeout_seconds
             )
             end = time.perf_counter_ns()
 

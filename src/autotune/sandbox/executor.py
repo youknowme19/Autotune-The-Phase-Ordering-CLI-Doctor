@@ -5,7 +5,7 @@ Isolated subprocess sandbox executor.
 import os
 import subprocess
 import tempfile
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel
 
 from autotune.doctor.errors import DoctorError, ErrorCode
@@ -31,6 +31,7 @@ class SandboxExecutor:
         self,
         binary_path: str,
         workload_path: Optional[str] = None,
+        binary_args: Optional[List[str]] = None,
         timeout_seconds: Optional[float] = None,
         cwd: Optional[str] = None,
     ) -> SandboxExecutionResult:
@@ -47,6 +48,9 @@ class SandboxExecutor:
             )
 
         cmd = [os.path.abspath(binary_path)]
+        if binary_args:
+            cmd.extend(binary_args)
+
         stdin_data: Optional[str] = None
 
         if workload_path and os.path.exists(workload_path):
