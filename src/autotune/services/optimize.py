@@ -34,6 +34,9 @@ class OptimizeResult(BaseModel):
     evidence_grade: str
     baseline_time_ms: float
     candidate_time_ms: float
+    cv_pct: float = 0.0
+    p_value: float = 1.0
+    cohens_d: float = 0.0
     winning_passes: List[str] = Field(default_factory=list)
     reproducible_command: str = ""
     run_dir: str
@@ -85,6 +88,7 @@ class OptimizeService:
             base_exec = executor.execute(base_bin, workload_path=workload)
             base_bench = runner.run_benchmark(base_bin, workload_path=workload, repetitions=10, warmup_runs=3)
             base_time_ns = base_bench.metrics.median_time_ns if base_bench.metrics else 1.0
+            base_samples = base_bench.metrics.samples_ns if (base_bench.metrics and base_bench.metrics.samples_ns) else [int(base_time_ns)]
 
             engine = GeneticAlgorithmEngine(
                 compiler=compiler,
@@ -109,6 +113,26 @@ class OptimizeService:
             winning_passes = best.sequence.passes if (best and best.is_valid) else []
             cand_time_ns = best.raw_time_ns if (best and best.is_valid and best.raw_time_ns) else base_time_ns
 
+            # Measure candidate samples if valid candidate exists
+            if best and best.is_valid and best.raw_time_ns:
+                cand_bin = os.path.join(tmpdir, "winning_candidate.bin")
+                compiler.compile_candidate(source, best.sequence, cand_bin)
+                cand_bench = runner.run_benchmark(cand_bin, workload_path=workload, repetitions=10, warmup_runs=3)
+                cand_samples = cand_bench.metrics.samples_ns if (cand_bench.metrics and cand_bench.metrics.samples_ns) else [int(cand_time_ns)]
+            else:
+                cand_samples = [int(cand_time_ns)]
+
+            # Calculate real scientific EvidenceScore from empirical raw timing samples
+            evidence_score = EvidenceEvaluator.evaluate(
+                baseline_samples_ns=base_samples,
+                candidate_samples_ns=cand_samples,
+                correctness_pass=(best.correctness_success if best else True),
+                fresh_confirmation=True,
+            )
+
+            cand_stability = StabilityAnalyzer.analyze(cand_samples)
+            real_cv_pct = round(cand_stability.cv * 100, 1)
+
             prescription = PrescriptionBuilder.build(
                 source_path=source,
                 output_binary="optimized_kernel.bin",
@@ -125,6 +149,7 @@ class OptimizeService:
                 "generations_searched": engine.generations,
                 "population_size": 15,
                 "prescription": prescription.model_dump(),
+                "evidence_score": evidence_score.model_dump(),
                 "workload_profile": w_profile.model_dump(),
                 "doctor_report": doc_report.model_dump(),
             }
@@ -140,7 +165,7 @@ class OptimizeService:
                 f.write(html_content)
 
             # Persist into KnowledgeStore if Grade A or B
-            grade = prescription.evidence_grade
+            grade = evidence_score.grade.value if hasattr(evidence_score.grade, "value") else str(evidence_score.grade)
             if grade in ("A", "B") and prescription.classification == "IMPROVED":
                 k_store = KnowledgeStore()
                 k_store.save_knowledge(
@@ -156,9 +181,12 @@ class OptimizeService:
                 source_path=source,
                 speedup_ratio=prescription.speedup_ratio,
                 classification=prescription.classification,
-                evidence_grade=prescription.evidence_grade,
+                evidence_grade=grade,
                 baseline_time_ms=prescription.baseline_time_ms,
                 candidate_time_ms=prescription.candidate_time_ms,
+                cv_pct=real_cv_pct,
+                p_value=evidence_score.p_value,
+                cohens_d=evidence_score.cohens_d_effect_size,
                 winning_passes=winning_passes,
                 reproducible_command=prescription.reproducible_clang_command,
                 run_dir=base_run_dir,
