@@ -469,6 +469,43 @@ def explain(
     console.print(table)
 
 
+@app.command()
+def knowledge(
+    action: str = typer.Argument("list", help="Action: list or inspect"),
+):
+    """Inspect local cross-run optimization memory stored in SQLite KnowledgeStore."""
+    from autotune.knowledge.store import KnowledgeStore
+    from rich.table import Table
+
+    store = KnowledgeStore()
+    records = store.list_records()
+
+    if not records:
+        console.print("[dim]No historical optimization knowledge records stored yet.[/dim]")
+        return
+
+    table = Table(title="Autotune Cross-Run Optimization Memory Records", border_style="cyan")
+    table.add_column("ID", style="dim")
+    table.add_column("Filename", style="bold white")
+    table.add_column("Architecture", style="cyan")
+    table.add_column("Speedup", style="bold green")
+    table.add_column("Classification", style="yellow")
+    table.add_column("Winning Pipeline", style="bold magenta")
+
+    for r in records:
+        pipe_str = " → ".join(r.winning_pipeline)
+        table.add_row(
+            str(r.id),
+            r.source_filename,
+            r.architecture,
+            f"{r.speedup_ratio}x",
+            r.classification,
+            pipe_str,
+        )
+
+    console.print(table)
+
+
 def main():
     app()
 

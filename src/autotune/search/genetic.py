@@ -536,7 +536,7 @@ class GeneticAlgorithmEngine:
         z_u = (u1 - mean_u) / std_u if std_u > 0 else 0.0
         p_val_mwu = 0.5 * math.erfc(abs(z_u) / math.sqrt(2))
 
-        # Save to Seed Archive if confirmed speedup
+        # Save to Seed Archive and KnowledgeStore if confirmed speedup
         if speedup > 1.0 and p_val_welch < 0.05:
             self.seed_mgr.save_seed(
                 pipeline=winner.sequence.passes,
@@ -549,6 +549,15 @@ class GeneticAlgorithmEngine:
                 correctness_status="PASS",
                 confirmation_status="CONFIRMED",
             )
+            try:
+                from autotune.analysis.profile import WorkloadProfiler
+                from autotune.knowledge.store import KnowledgeStore
+                profiler = WorkloadProfiler()
+                prof = profiler.profile_file(source_path, architecture=getattr(self.compiler, "target_arch", "arm64"))
+                store = KnowledgeStore()
+                store.save_knowledge(profile=prof, winning_pipeline=winner.sequence.passes, speedup_ratio=speedup)
+            except Exception:
+                pass
 
         return {
             "baseline_samples_ms": [round(s / 1e6, 3) for s in b_ns],
