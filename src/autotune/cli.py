@@ -562,6 +562,63 @@ def bundle(
     console.print(f"  - [cyan]{output_dir}/README.md[/cyan] (Reproduction summary)")
 
 
+@app.command()
+def cache(
+    action: str = typer.Argument("status", help="Action: status or clear"),
+):
+    """Inspect or manage the persistent compilation and benchmark result cache."""
+    cache_dir = os.path.join(os.getcwd(), ".autotune", "cache")
+
+    if action == "clear":
+        if os.path.exists(cache_dir):
+            import shutil
+            shutil.rmtree(cache_dir)
+            console.print("[bold green]Persistent benchmark cache successfully cleared.[/bold green]")
+        else:
+            console.print("[dim]Cache directory is already empty.[/dim]")
+        return
+
+    # Default action: status
+    if not os.path.exists(cache_dir):
+        console.print("[dim]Persistent cache directory does not exist yet.[/dim]")
+        return
+
+    files = [f for f in os.listdir(cache_dir) if f.endswith(".json")]
+    total_bytes = sum(os.path.getsize(os.path.join(cache_dir, f)) for f in files)
+    console.print(f"Cache Location: [bold cyan]{cache_dir}[/bold cyan]")
+    console.print(f"Cached Candidates: [bold green]{len(files)}[/bold green]")
+    console.print(f"Total Storage: [bold yellow]{round(total_bytes / 1024, 1)} KB[/bold yellow]")
+
+
+@app.command()
+def gate(
+    report_json: str = typer.Argument(..., help="Path to JSON search report file exported by autotune search"),
+    min_speedup: float = typer.Option(1.05, "--min-speedup", "-m", help="Minimum required speedup ratio for CI gate to pass"),
+):
+    """CI Performance Gate: Evaluates search report against minimum required speedup threshold."""
+    if not os.path.exists(report_json):
+        console.print(f"[bold red]Error: Search report JSON '{report_json}' not found.[/bold red]")
+        raise typer.Exit(code=2)
+
+    with open(report_json, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    p_data = data.get("prescription", {})
+    speedup = p_data.get("speedup_ratio", 1.0)
+    classification = p_data.get("classification", "NO_SIGNIFICANT_CHANGE")
+
+    console.print(f"Evaluating CI Performance Gate for report: [cyan]{report_json}[/cyan]")
+    console.print(f"Target Speedup Threshold: [bold yellow]{min_speedup}x[/bold yellow]")
+    console.print(f"Observed Speedup:         [bold green]{speedup}x[/bold green]")
+    console.print(f"Result Classification:    [bold cyan]{classification}[/bold cyan]")
+
+    if speedup >= min_speedup and classification == "IMPROVED":
+        console.print("[bold green]✓ CI PERFORMANCE GATE PASSED: Speedup meets target threshold.[/bold green]")
+    else:
+        console.print(f"[bold red]✗ CI PERFORMANCE GATE FAILED: Speedup {speedup}x is below required {min_speedup}x target.[/bold red]")
+        raise typer.Exit(code=1)
+
+
 def main():
     app()
 
