@@ -10,7 +10,7 @@
 
 ---
 
-## ⚡ What is Autotune?
+## What is Autotune?
 
 **Autotune** is an open-source command-line tool for developers and compiler engineers who want to extract maximum performance from C and C++ programs.
 
@@ -20,7 +20,7 @@ It combines structural C/C++ AST analysis, optional LLM seed proposal generation
 
 ---
 
-## 🎯 Why does this exist?
+## Why does this exist?
 
 ### The -O3 Problem
 When you compile C or C++ code with `clang -O3`, the compiler runs a fixed pipeline of over 100 optimization passes (such as loop unrolling, dead code elimination, constant propagation, and vectorization) in a pre-determined order.
@@ -35,7 +35,7 @@ Compiler pass ordering is highly sensitive to code structure:
 
 ---
 
-## 🏆 Verified Result
+## Verified Result
 
 In scientific validation benchmarks, Autotune discovered a custom LLVM pass sequence for a C matrix transpose kernel ([`examples/matrix_transpose/kernel.c`](examples/matrix_transpose/kernel.c)) that achieved **1.26x speedup** (**20.7% runtime reduction**) over Clang `-O3`.
 
@@ -63,7 +63,7 @@ In scientific validation benchmarks, Autotune discovered a custom LLVM pass sequ
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Install via PyPI
 ```bash
@@ -93,7 +93,7 @@ autotune search ./examples/matrix_transpose/kernel.c \
 
 ---
 
-## 💻 Example
+## Example
 
 Upon search completion, Autotune presents a rich terminal dashboard and a copy-pasteable compiler prescription:
 
@@ -125,7 +125,7 @@ examples/matrix_transpose/kernel.c -o - | /opt/homebrew/opt/llvm/bin/opt
 
 ---
 
-## 🧠 How It Works
+## How It Works
 
 ![Autotune System Architecture](docs/images/architecture.svg)
 
@@ -138,7 +138,7 @@ examples/matrix_transpose/kernel.c -o - | /opt/homebrew/opt/llvm/bin/opt
 
 ---
 
-## 🔬 Research Validation
+## Research Validation
 
 ### Matrix Transpose Flagship Case Study
 - **Target Source**: [`examples/matrix_transpose/kernel.c`](examples/matrix_transpose/kernel.c) ($N=512$, 100 iterations)
@@ -158,7 +158,7 @@ examples/matrix_transpose/kernel.c -o - | /opt/homebrew/opt/llvm/bin/opt
 
 ---
 
-## ✨ Key Features
+## Key Features
 
 - **AI & Heuristic Seeding**: Support for OpenAI, Anthropic, Gemini, or 100% offline AST-based proposal seeding.
 - **Genetic Algorithm Search**: Multi-generation pipeline evolution with tournament selection, crossover, and mutation.
@@ -170,13 +170,13 @@ examples/matrix_transpose/kernel.c -o - | /opt/homebrew/opt/llvm/bin/opt
 
 ---
 
-## 📊 Benchmarking
+## Benchmarking
 
 Autotune incorporates monotonic nanosecond timing backends, baseline gating, and statistical noise rejection. For detailed benchmark methodology and statistical analysis, see [docs/benchmarks.md](docs/benchmarks.md).
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 Common CLI flags for `autotune search`:
 
@@ -193,7 +193,7 @@ Common CLI flags for `autotune search`:
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 Explore the complete documentation in [`docs/`](docs/README.md):
 
@@ -207,7 +207,7 @@ Explore the complete documentation in [`docs/`](docs/README.md):
 
 ---
 
-## 🛠️ Development
+## Development
 
 ### Setup Local Development Environment
 ```bash
@@ -228,18 +228,18 @@ pytest -v
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please review [`CONTRIBUTING.md`](CONTRIBUTING.md) before submitting pull requests.
 
 ---
 
-## 🔐 Security
+## Security
 
 Security disclosures and key security guidelines are detailed in [`SECURITY.md`](SECURITY.md).
 
 ---
 
-## 📜 License
+## License
 
 Distributed under the Apache 2.0 License. See [`LICENSE`](LICENSE) for details.
