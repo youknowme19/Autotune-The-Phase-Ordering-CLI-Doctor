@@ -47,12 +47,19 @@ class PrescriptionBuilder:
 
         if candidate_time_ns <= 0 or baseline_time_ns <= 0:
             classification = ResultClassification.NO_VALID_CANDIDATE
+            grade = "F"
+        elif speedup >= 1.05:
+            classification = ResultClassification.IMPROVED
+            grade = "A"
         elif speedup >= 1.02:
             classification = ResultClassification.IMPROVED
+            grade = "B"
         elif speedup >= 0.98:
             classification = ResultClassification.TIE
+            grade = "D"
         else:
             classification = ResultClassification.REGRESSION
+            grade = "F"
 
         return CompilerPrescription(
             pass_sequence=pass_sequence,
@@ -62,4 +69,5 @@ class PrescriptionBuilder:
             candidate_time_ms=c_ms,
             speedup_ratio=speedup,
             classification=classification,
+            evidence_grade=grade,
         )
