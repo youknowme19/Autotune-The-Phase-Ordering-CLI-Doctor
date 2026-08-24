@@ -47,10 +47,16 @@ def find_tool(
     if custom_path and os.path.exists(custom_path) and os.access(custom_path, os.X_OK):
         return custom_path
 
-    # Prioritize matching LLVM Homebrew toolchain paths first for clang/opt version parity
+    # Prioritize matching LLVM Homebrew & Linux toolchain paths first for clang/opt version parity
     candidate_paths = [
         f"/opt/homebrew/opt/llvm/bin/{tool_name}",
         f"/usr/local/opt/llvm/bin/{tool_name}",
+        f"/usr/lib/llvm-19/bin/{tool_name}",
+        f"/usr/lib/llvm-18/bin/{tool_name}",
+        f"/usr/lib/llvm-17/bin/{tool_name}",
+        f"/usr/lib/llvm-16/bin/{tool_name}",
+        f"/usr/lib/llvm-15/bin/{tool_name}",
+        f"/usr/lib/llvm-14/bin/{tool_name}",
     ]
     for candidate in candidate_paths:
         if os.path.exists(candidate) and os.access(candidate, os.X_OK):
