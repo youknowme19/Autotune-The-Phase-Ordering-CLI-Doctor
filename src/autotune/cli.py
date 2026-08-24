@@ -619,6 +619,72 @@ def gate(
         raise typer.Exit(code=1)
 
 
+@app.command()
+def compare(
+    report_a: str = typer.Argument(..., help="Path to first JSON search report file (Baseline / Previous Run)"),
+    report_b: str = typer.Argument(..., help="Path to second JSON search report file (Candidate / Optimized Run)"),
+):
+    """Compare two optimization search reports side-by-side."""
+    if not os.path.exists(report_a) or not os.path.exists(report_b):
+        console.print("[bold red]Error: One or both report JSON files not found.[/bold red]")
+        raise typer.Exit(code=2)
+
+    with open(report_a, "r", encoding="utf-8") as f:
+        data_a = json.load(f)
+    with open(report_b, "r", encoding="utf-8") as f:
+        data_b = json.load(f)
+
+    p_a = data_a.get("prescription", {})
+    p_b = data_b.get("prescription", {})
+
+    sp_a = p_a.get("speedup_ratio", 1.0)
+    sp_b = p_b.get("speedup_ratio", 1.0)
+    diff = round(sp_b - sp_a, 3)
+
+    from rich.table import Table
+    table = Table(title="Autotune Optimization Search Comparison", border_style="cyan")
+    table.add_column("Metric", style="bold white")
+    table.add_column("Report A (Baseline)", style="yellow")
+    table.add_column("Report B (Candidate)", style="green")
+    table.add_column("Differential", style="bold magenta")
+
+    table.add_row("Speedup Ratio", f"{sp_a}x", f"{sp_b}x", f"{'+' if diff >= 0 else ''}{diff}x")
+    table.add_row("Classification", p_a.get("classification", "N/A"), p_b.get("classification", "N/A"), "N/A")
+    table.add_row("Evidence Grade", p_a.get("evidence_grade", "B"), p_b.get("evidence_grade", "B"), "N/A")
+    table.add_row("Passes Count", str(len(p_a.get("pass_sequence", {}).get("passes", []))), str(len(p_b.get("pass_sequence", {}).get("passes", []))), "N/A")
+
+    console.print(table)
+    if sp_b > sp_a:
+        console.print(f"[bold green]Report B outperformed Report A by +{diff}x speedup gain.[/bold green]")
+    elif sp_b < sp_a:
+        console.print(f"[bold red]Report B regressed relative to Report A by {diff}x speedup delta.[/bold red]")
+    else:
+        console.print("[yellow]Report A and Report B achieved identical speedup parity.[/yellow]")
+
+
+@app.command()
+def report(
+    report_json: str = typer.Argument(..., help="Path to JSON search report file exported by autotune search"),
+    html: str = typer.Option("./autotune_report.html", "--html", "-h", help="Output path for standalone HTML report"),
+):
+    """Generate a standalone, zero-dependency offline HTML report from a JSON search report."""
+    if not os.path.exists(report_json):
+        console.print(f"[bold red]Error: Search report JSON '{report_json}' not found.[/bold red]")
+        raise typer.Exit(code=2)
+
+    with open(report_json, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    from autotune.reporting.html import HTMLReportGenerator
+    html_content = HTMLReportGenerator.generate_html(data)
+
+    os.makedirs(os.path.dirname(os.path.abspath(html)), exist_ok=True)
+    with open(html, "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+    console.print(f"[bold green]Successfully generated standalone HTML report: [cyan]{html}[/cyan][/bold green]")
+
+
 def main():
     app()
 
