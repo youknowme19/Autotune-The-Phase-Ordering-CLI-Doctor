@@ -16,6 +16,7 @@ class CompilerPrescription(BaseModel):
     candidate_time_ms: float
     speedup_ratio: float
     classification: ResultClassification = ResultClassification.IMPROVED
+    evidence_grade: str = "B"
 
 
 class PrescriptionBuilder:

@@ -654,41 +654,26 @@ def compare(
     report_b: str = typer.Argument(..., help="Path to second JSON search report file (Candidate / Optimized Run)"),
 ):
     """Compare two optimization search reports side-by-side."""
-    if not os.path.exists(report_a) or not os.path.exists(report_b):
-        console.print("[bold red]Error: One or both report JSON files not found.[/bold red]")
+    from autotune.services.compare import CompareService
+    try:
+        res = CompareService.compare_reports(report_a, report_b)
+        from rich.table import Table
+        table = Table(title="Autotune Optimization Search Comparison", border_style="cyan")
+        table.add_column("Metric", style="bold white")
+        table.add_column("Report A (Baseline)", style="yellow")
+        table.add_column("Report B (Candidate)", style="green")
+        table.add_column("Differential", style="bold magenta")
+
+        table.add_row("Speedup Ratio", f"{res.speedup_a}x", f"{res.speedup_b}x", f"{'+' if res.speedup_diff >= 0 else ''}{res.speedup_diff}x")
+        table.add_row("Classification", res.classification_a, res.classification_b, "N/A")
+        table.add_row("Evidence Grade", res.evidence_grade_a, res.evidence_grade_b, "N/A")
+        table.add_row("Passes Count", str(res.passes_count_a), str(res.passes_count_b), "N/A")
+
+        console.print(table)
+        console.print(f"[bold cyan]{res.summary}[/bold cyan]")
+    except Exception as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
         raise typer.Exit(code=2)
-
-    with open(report_a, "r", encoding="utf-8") as f:
-        data_a = json.load(f)
-    with open(report_b, "r", encoding="utf-8") as f:
-        data_b = json.load(f)
-
-    p_a = data_a.get("prescription", {})
-    p_b = data_b.get("prescription", {})
-
-    sp_a = p_a.get("speedup_ratio", 1.0)
-    sp_b = p_b.get("speedup_ratio", 1.0)
-    diff = round(sp_b - sp_a, 3)
-
-    from rich.table import Table
-    table = Table(title="Autotune Optimization Search Comparison", border_style="cyan")
-    table.add_column("Metric", style="bold white")
-    table.add_column("Report A (Baseline)", style="yellow")
-    table.add_column("Report B (Candidate)", style="green")
-    table.add_column("Differential", style="bold magenta")
-
-    table.add_row("Speedup Ratio", f"{sp_a}x", f"{sp_b}x", f"{'+' if diff >= 0 else ''}{diff}x")
-    table.add_row("Classification", p_a.get("classification", "N/A"), p_b.get("classification", "N/A"), "N/A")
-    table.add_row("Evidence Grade", p_a.get("evidence_grade", "B"), p_b.get("evidence_grade", "B"), "N/A")
-    table.add_row("Passes Count", str(len(p_a.get("pass_sequence", {}).get("passes", []))), str(len(p_b.get("pass_sequence", {}).get("passes", []))), "N/A")
-
-    console.print(table)
-    if sp_b > sp_a:
-        console.print(f"[bold green]Report B outperformed Report A by +{diff}x speedup gain.[/bold green]")
-    elif sp_b < sp_a:
-        console.print(f"[bold red]Report B regressed relative to Report A by {diff}x speedup delta.[/bold red]")
-    else:
-        console.print("[yellow]Report A and Report B achieved identical speedup parity.[/yellow]")
 
 
 @app.command()
@@ -697,21 +682,13 @@ def report(
     html: str = typer.Option("./autotune_report.html", "--html", "-h", help="Output path for standalone HTML report"),
 ):
     """Generate a standalone, zero-dependency offline HTML report from a JSON search report."""
-    if not os.path.exists(report_json):
-        console.print(f"[bold red]Error: Search report JSON '{report_json}' not found.[/bold red]")
+    from autotune.services.report import ReportService
+    try:
+        out_path = ReportService.render_html_report(report_json, html)
+        console.print(f"[bold green]Successfully generated standalone HTML report: [cyan]{out_path}[/cyan][/bold green]")
+    except Exception as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
         raise typer.Exit(code=2)
-
-    with open(report_json, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    from autotune.reporting.html import HTMLReportGenerator
-    html_content = HTMLReportGenerator.generate_html(data)
-
-    os.makedirs(os.path.dirname(os.path.abspath(html)), exist_ok=True)
-    with open(html, "w", encoding="utf-8") as f:
-        f.write(html_content)
-
-    console.print(f"[bold green]Successfully generated standalone HTML report: [cyan]{html}[/cyan][/bold green]")
 
 
 @app.command()
@@ -721,63 +698,32 @@ def optimize(
     args: Optional[str] = typer.Option(None, "--args", help="Space-separated binary command-line arguments"),
     time_budget: int = typer.Option(30, "--time-budget", "-t", help="Search time budget limit in seconds"),
     seed: int = typer.Option(42, "--seed", "-s", help="Random seed for deterministic search"),
-    output_dir: str = typer.Option("./autotune_results", "--output", "-o", help="Output directory for prescription, report, and bundle assets"),
+    output_dir: Optional[str] = typer.Option(None, "--output", "-o", help="Output directory for prescription, report, and bundle assets"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Enable quiet mode for CI logging"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose debug logging"),
 ):
     """Flagship Command: Orchestrate complete end-to-end workload optimization, evidence grading, HTML report, and prescription export."""
-    if not os.path.exists(source):
-        console.print(f"[bold red]Error: Source file '{source}' not found.[/bold red]")
-        raise typer.Exit(code=2)
-
-    os.makedirs(output_dir, exist_ok=True)
-    report_json_path = os.path.join(output_dir, "report.json")
-    html_report_path = os.path.join(output_dir, "report.html")
-
-    # Delegate seamlessly to search engine orchestration
-    search(
-        source=source,
-        workload=workload,
-        args=args,
-        generations=15,
-        population=15,
-        seed=seed,
-        resume=None,
-        early_stop=10,
-        time_budget=time_budget,
-        workers=4,
-        warmup=5,
-        runs=30,
-        fidelity="HIGH",
-        screen_runs=3,
-        confirm_runs=20,
-        cache=True,
-        fresh=False,
-        fresh_benchmark=False,
-        baseline_gate=True,
-        fail_on_regression=False,
-        regression_threshold=0.05,
-        llm=False,
-        provider="openai",
-        correctness_strategy="exitcode",
-        output_json=report_json_path,
-        quiet=quiet,
-        verbose=verbose,
-    )
-
-    if os.path.exists(report_json_path):
-        with open(report_json_path, "r", encoding="utf-8") as f:
-            r_data = json.load(f)
-
-        from autotune.reporting.html import HTMLReportGenerator
-        html_code = HTMLReportGenerator.generate_html(r_data)
-        with open(html_report_path, "w", encoding="utf-8") as f:
-            f.write(html_code)
-
+    from autotune.services.optimize import OptimizeService
+    try:
+        res = OptimizeService.run(
+            source=source,
+            workload=workload,
+            args=args,
+            time_budget=time_budget,
+            seed=seed,
+            output_dir=output_dir,
+            quiet=quiet,
+        )
         if not quiet:
             console.print(f"\n[bold green]✓ Optimization Workflow Complete![/bold green]")
-            console.print(f"  - Report JSON:   [cyan]{report_json_path}[/cyan]")
-            console.print(f"  - Offline HTML:  [cyan]{html_report_path}[/cyan]\n")
+            console.print(f"  - Run ID:        [bold cyan]{res.run_id}[/bold cyan]")
+            console.print(f"  - Speedup Ratio: [bold yellow]{res.speedup_ratio}x[/bold yellow] ({res.classification})")
+            console.print(f"  - Evidence:      [bold green]Grade {res.evidence_grade}[/bold green]")
+            console.print(f"  - Report JSON:   [cyan]{res.report_json_path}[/cyan]")
+            console.print(f"  - Offline HTML:  [cyan]{res.report_html_path}[/cyan]\n")
+    except Exception as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -785,13 +731,8 @@ def validate(
     quick: bool = typer.Option(False, "--quick", help="Run fast validation harness with small search budgets"),
 ):
     """Validation Harness: Run curated example benchmarks and report empirical timing and speedup metrics."""
-    examples_list = [
-        "examples/matrix/matrix_mul.c",
-        "examples/vector/vector_add.c",
-        "examples/loop/loop_reduction.c",
-        "examples/memory/stencil_2d.c",
-        "examples/branch/binary_search.c",
-    ]
+    from autotune.services.validate import ValidateService
+    res = ValidateService.run_validation(quick=quick)
 
     from rich.table import Table
     table = Table(title="Autotune Curated Benchmark Validation Harness", border_style="cyan")
@@ -802,58 +743,49 @@ def validate(
     table.add_column("Evidence", style="cyan")
     table.add_column("Correctness", style="bold green")
 
-    budget = 10 if quick else 15
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        for ex in examples_list:
-            if not os.path.exists(ex):
-                continue
-
-            r_json = os.path.join(tmpdir, f"{os.path.basename(ex)}.json")
-            try:
-                search(
-                    source=ex,
-                    workload=None,
-                    args=None,
-                    generations=10,
-                    population=10,
-                    seed=42,
-                    resume=None,
-                    early_stop=10,
-                    time_budget=budget,
-                    workers=4,
-                    warmup=3,
-                    runs=10,
-                    fidelity="HIGH",
-                    screen_runs=3,
-                    confirm_runs=20,
-                    cache=True,
-                    fresh=False,
-                    fresh_benchmark=False,
-                    baseline_gate=True,
-                    fail_on_regression=False,
-                    regression_threshold=0.05,
-                    llm=False,
-                    provider="openai",
-                    correctness_strategy="exitcode",
-                    output_json=r_json,
-                    quiet=True,
-                    verbose=False,
-                )
-
-                if os.path.exists(r_json):
-                    with open(r_json, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    p_data = data.get("prescription", {})
-                    base_ms = f"{round(p_data.get('baseline_time_ms', 0), 2)} ms"
-                    cand_ms = f"{round(p_data.get('candidate_time_ms', 0), 2)} ms"
-                    spd = f"{p_data.get('speedup_ratio', 1.0)}x"
-                    ev = f"Grade {p_data.get('evidence_grade', 'B')}"
-                    table.add_row(os.path.basename(ex), base_ms, cand_ms, spd, ev, "PASS")
-            except Exception as e:
-                table.add_row(os.path.basename(ex), "ERR", "ERR", "1.00x", f"Grade F ({type(e).__name__}: {e})", "FAIL")
+    for item in res.items:
+        b_ms = f"{round(item.baseline_ms, 2)} ms" if item.baseline_ms > 0 else "N/A"
+        c_ms = f"{round(item.candidate_ms, 2)} ms" if item.candidate_ms > 0 else "N/A"
+        table.add_row(item.workload, b_ms, c_ms, f"{item.speedup}x", f"Grade {item.evidence_grade}", item.correctness)
 
     console.print(table)
+
+
+# --- Runs Subcommand Group ---
+runs_app = typer.Typer(help="Manage local Autotune run directories and search artifacts.")
+app.add_typer(runs_app, name="runs")
+
+
+@runs_app.command("list")
+def runs_list():
+    """List all saved Autotune optimization runs under .autotune/runs/."""
+    runs_dir = os.path.join(os.getcwd(), ".autotune", "runs")
+    if not os.path.exists(runs_dir):
+        console.print("[dim]No optimization runs found.[/dim]")
+        return
+
+    subdirs = [d for d in os.listdir(runs_dir) if os.path.isdir(os.path.join(runs_dir, d))]
+    from rich.table import Table
+    table = Table(title="Saved Autotune Optimization Runs", border_style="cyan")
+    table.add_column("Run ID", style="bold cyan")
+    table.add_column("Path", style="dim")
+
+    for sd in sorted(subdirs, reverse=True):
+        table.add_row(sd, os.path.join(runs_dir, sd))
+
+    console.print(table)
+
+
+@runs_app.command("clean")
+def runs_clean():
+    """Clean all saved run directories from .autotune/runs/."""
+    runs_dir = os.path.join(os.getcwd(), ".autotune", "runs")
+    if os.path.exists(runs_dir):
+        import shutil
+        shutil.rmtree(runs_dir, ignore_errors=True)
+        console.print("[bold green]Successfully cleaned all saved run directories.[/bold green]")
+    else:
+        console.print("[dim]No runs directory to clean.[/dim]")
 
 
 def main():

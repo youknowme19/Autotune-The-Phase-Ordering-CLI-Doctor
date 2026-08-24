@@ -3,6 +3,7 @@ Standalone Offline HTML Report Generator.
 Generates zero-dependency, self-contained HTML optimization reports with modern styling.
 """
 
+import html
 import json
 import os
 from typing import Any, Dict, Optional
@@ -16,11 +17,11 @@ class HTMLReportGenerator:
     def generate_html(report_data: Dict[str, Any]) -> str:
         p_data = report_data.get("prescription", {})
         speedup = p_data.get("speedup_ratio", 1.0)
-        classification = p_data.get("classification", "NO_SIGNIFICANT_CHANGE")
-        evidence_grade = p_data.get("evidence_grade", "B")
+        classification = html.escape(str(p_data.get("classification", "NO_SIGNIFICANT_CHANGE")))
+        evidence_grade = html.escape(str(p_data.get("evidence_grade", "B")))
         passes = p_data.get("pass_sequence", {}).get("passes", [])
-        clang_cmd = p_data.get("reproducible_clang_command", "clang -O3")
-        source = report_data.get("source_path", "N/A")
+        clang_cmd = html.escape(str(p_data.get("reproducible_clang_command", "clang -O3")))
+        source = html.escape(str(report_data.get("source_path", "N/A")))
         gen = report_data.get("generations_searched", 0)
         pop = report_data.get("population_size", 0)
 
@@ -31,12 +32,12 @@ class HTMLReportGenerator:
         comp_intensity = w_prof.get("compute_intensity", 0.0)
 
         doc = report_data.get("doctor_report", {})
-        arch = doc.get("arch", "arm64")
-        clang_ver = doc.get("clang_version", "Clang")
+        arch = html.escape(str(doc.get("arch", "arm64")))
+        clang_ver = html.escape(str(doc.get("clang_version", "Clang")))
 
-        pass_tags = "".join(f'<span class="pass-badge">{p}</span>' for p in passes)
+        pass_tags = "".join(f'<span class="pass-badge">{html.escape(str(p))}</span>' for p in passes)
 
-        html = f"""<!DOCTYPE html>
+        html_code = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -167,4 +168,4 @@ class HTMLReportGenerator:
 </body>
 </html>
 """
-        return html
+        return html_code
