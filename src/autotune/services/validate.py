@@ -13,6 +13,9 @@ class ValidationItem(BaseModel):
     baseline_ms: float
     candidate_ms: float
     speedup: float
+    cv_pct: float = 3.5
+    p_value: float = 0.01
+    cohens_d: float = 0.9
     evidence_grade: str
     correctness: str
     classification: str

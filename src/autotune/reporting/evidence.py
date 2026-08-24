@@ -30,6 +30,7 @@ class EvidenceScore(BaseModel):
     low_noise: bool
     statistically_significant: bool
     cohens_d_effect_size: float
+    p_value: float = 1.0
     speedup_ratio: float
     rationale: List[str] = Field(default_factory=list)
 
@@ -136,6 +137,7 @@ class EvidenceEvaluator:
             low_noise=low_noise,
             statistically_significant=stat_sig,
             cohens_d_effect_size=round(cohens_d, 2),
+            p_value=round(p_val, 4),
             speedup_ratio=speedup,
             rationale=rationale,
         )

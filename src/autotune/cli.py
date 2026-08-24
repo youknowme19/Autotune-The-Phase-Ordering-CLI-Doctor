@@ -635,16 +635,18 @@ def gate(
     p_data = data.get("prescription", {})
     speedup = p_data.get("speedup_ratio", 1.0)
     classification = p_data.get("classification", "NO_SIGNIFICANT_CHANGE")
+    evidence_grade = p_data.get("evidence_grade", "A" if speedup >= 1.05 else "B")
 
     console.print(f"Evaluating CI Performance Gate for report: [cyan]{report_json}[/cyan]")
     console.print(f"Target Speedup Threshold: [bold yellow]{min_speedup}x[/bold yellow]")
     console.print(f"Observed Speedup:         [bold green]{speedup}x[/bold green]")
     console.print(f"Result Classification:    [bold cyan]{classification}[/bold cyan]")
+    console.print(f"Evidence Grade:           [bold green]Grade {evidence_grade}[/bold green]")
 
-    if speedup >= min_speedup and classification == "IMPROVED":
-        console.print("[bold green]✓ CI PERFORMANCE GATE PASSED: Speedup meets target threshold.[/bold green]")
+    if speedup >= min_speedup and classification == "IMPROVED" and evidence_grade in ("A", "B"):
+        console.print("[bold green]✓ CI PERFORMANCE GATE PASSED: Speedup and evidence grade meet target thresholds.[/bold green]")
     else:
-        console.print(f"[bold red]✗ CI PERFORMANCE GATE FAILED: Speedup {speedup}x is below required {min_speedup}x target.[/bold red]")
+        console.print(f"[bold red]✗ CI PERFORMANCE GATE FAILED: Speedup {speedup}x or Evidence Grade {evidence_grade} does not meet requirements.[/bold red]")
         raise typer.Exit(code=1)
 
 
@@ -740,13 +742,19 @@ def validate(
     table.add_column("Baseline (-O3)", style="yellow")
     table.add_column("Optimized", style="green")
     table.add_column("Speedup", style="bold magenta")
+    table.add_column("CV %", style="dim")
+    table.add_column("p-value", style="dim")
+    table.add_column("Cohen's d", style="dim")
     table.add_column("Evidence", style="cyan")
     table.add_column("Correctness", style="bold green")
 
     for item in res.items:
         b_ms = f"{round(item.baseline_ms, 2)} ms" if item.baseline_ms > 0 else "N/A"
         c_ms = f"{round(item.candidate_ms, 2)} ms" if item.candidate_ms > 0 else "N/A"
-        table.add_row(item.workload, b_ms, c_ms, f"{item.speedup}x", f"Grade {item.evidence_grade}", item.correctness)
+        cv_str = f"{item.cv_pct}%"
+        pval_str = f"{item.p_value}"
+        cd_str = f"{item.cohens_d}"
+        table.add_row(item.workload, b_ms, c_ms, f"{item.speedup}x", cv_str, pval_str, cd_str, f"Grade {item.evidence_grade}", item.correctness)
 
     console.print(table)
 
