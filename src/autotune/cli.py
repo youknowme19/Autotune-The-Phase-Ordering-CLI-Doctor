@@ -506,6 +506,62 @@ def knowledge(
     console.print(table)
 
 
+@app.command()
+def bundle(
+    report_json: str = typer.Argument(..., help="Path to JSON search report file exported by autotune search"),
+    output_dir: str = typer.Option("./autotune_reproducibility_bundle", "--output-dir", "-b", help="Output directory path for self-contained research bundle"),
+):
+    """Create a self-contained research reproduction bundle for scientific papers and bug reports."""
+    if not os.path.exists(report_json):
+        console.print(f"[bold red]Error: Search report JSON '{report_json}' not found.[/bold red]")
+        raise typer.Exit(code=2)
+
+    with open(report_json, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    from autotune.environment.fingerprint import EnvironmentFingerprinter
+    fp = EnvironmentFingerprinter.capture()
+
+    # Save environment fingerprint
+    with open(os.path.join(output_dir, "environment.json"), "w", encoding="utf-8") as f:
+        json.dump(fp.model_dump(), f, indent=2)
+
+    # Save search report data
+    with open(os.path.join(output_dir, "manifest.json"), "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+    p_data = data.get("prescription", {})
+    cmd = p_data.get("reproducible_clang_command", "clang -O3")
+    passes = p_data.get("pass_sequence", {}).get("passes", [])
+
+    # Save reproducible script
+    sh_path = os.path.join(output_dir, "reproduce.sh")
+    with open(sh_path, "w", encoding="utf-8") as f:
+        f.write("#!/bin/bash\n")
+        f.write("# Autotune Research Reproduction Script\n")
+        f.write("set -euo pipefail\n\n")
+        f.write(f"echo 'Rebuilding optimized binary with pass sequence: {passes}'\n")
+        f.write(f"{cmd}\n")
+        f.write("echo 'Build complete.'\n")
+    os.chmod(sh_path, 0o755)
+
+    # Save README
+    with open(os.path.join(output_dir, "README.md"), "w", encoding="utf-8") as f:
+        f.write("# Autotune Research Reproduction Bundle\n\n")
+        f.write(f"**Source File:** `{data.get('source_path', 'N/A')}`  \n")
+        f.write(f"**Speedup Ratio:** **{p_data.get('speedup_ratio', 1.0)}x**  \n")
+        f.write(f"**Environment Fingerprint:** `{fp.fingerprint_hash}` ({fp.os_name} {fp.architecture})  \n\n")
+        f.write("## Reproduce Command\n```bash\n./reproduce.sh\n```\n")
+
+    console.print(f"[bold green]Successfully created research reproduction bundle in directory '{output_dir}/':[/bold green]")
+    console.print(f"  - [cyan]{output_dir}/environment.json[/cyan] (System & compiler fingerprint)")
+    console.print(f"  - [cyan]{output_dir}/manifest.json[/cyan] (Full experiment manifest)")
+    console.print(f"  - [cyan]{output_dir}/reproduce.sh[/cyan] (Executable build script)")
+    console.print(f"  - [cyan]{output_dir}/README.md[/cyan] (Reproduction summary)")
+
+
 def main():
     app()
 

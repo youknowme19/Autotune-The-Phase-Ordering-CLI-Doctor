@@ -22,6 +22,7 @@ class KnowledgeRecord(BaseModel):
     winning_pipeline: List[str]
     speedup_ratio: float
     classification: str
+    evidence_grade: str = "B"
     loop_count: int
     float_ops: int
     memory_intensity: float
@@ -50,6 +51,7 @@ class KnowledgeStore:
                     winning_pipeline TEXT NOT NULL,
                     speedup_ratio REAL NOT NULL,
                     classification TEXT NOT NULL,
+                    evidence_grade TEXT DEFAULT 'B',
                     loop_count INTEGER NOT NULL,
                     float_ops INTEGER NOT NULL,
                     memory_intensity REAL NOT NULL,
@@ -57,6 +59,13 @@ class KnowledgeStore:
                 )
             """)
             conn.commit()
+            
+            # Migration check for existing SQLite databases missing evidence_grade column
+            cursor = conn.execute("PRAGMA table_info(knowledge_records)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if columns and "evidence_grade" not in columns:
+                conn.execute("ALTER TABLE knowledge_records ADD COLUMN evidence_grade TEXT DEFAULT 'B'")
+                conn.commit()
 
     def save_knowledge(
         self,
@@ -64,8 +73,9 @@ class KnowledgeStore:
         winning_pipeline: List[str],
         speedup_ratio: float,
         classification: str = "IMPROVED",
+        evidence_grade: str = "B",
     ) -> None:
-        if not winning_pipeline or speedup_ratio <= 1.0:
+        if not winning_pipeline or speedup_ratio <= 1.0 or evidence_grade in ("C", "D", "F"):
             return
 
         with sqlite3.connect(self.db_path) as conn:
@@ -73,9 +83,9 @@ class KnowledgeStore:
                 """
                 INSERT INTO knowledge_records (
                     source_hash, source_filename, architecture, compiler_version,
-                    winning_pipeline, speedup_ratio, classification,
+                    winning_pipeline, speedup_ratio, classification, evidence_grade,
                     loop_count, float_ops, memory_intensity, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     profile.source_hash,
@@ -85,6 +95,7 @@ class KnowledgeStore:
                     json.dumps(winning_pipeline),
                     speedup_ratio,
                     classification,
+                    evidence_grade,
                     profile.loop_count,
                     profile.float_ops,
                     profile.memory_intensity,
@@ -96,7 +107,7 @@ class KnowledgeStore:
     def find_similar_workloads(
         self, profile: WorkloadProfile, limit: int = 3
     ) -> List[List[str]]:
-        """Find historical pipelines from structurally similar workloads using profile feature distance."""
+        """Find historical pipelines from structurally similar workloads using profile feature distance, filtering for Grade A/B evidence only."""
         records: List[KnowledgeRecord] = self.list_records()
         if not records:
             return []
@@ -105,6 +116,10 @@ class KnowledgeStore:
         for r in records:
             if r.architecture != profile.architecture:
                 continue
+            # Evidence-aware filtering: only reuse Grade A or Grade B historical evidence
+            if r.evidence_grade not in ("A", "B"):
+                continue
+
             # Calculate profile distance
             d_loop = abs(r.loop_count - profile.loop_count) / 10.0
             d_float = abs(r.float_ops - profile.float_ops) / 20.0
@@ -120,7 +135,7 @@ class KnowledgeStore:
         records = []
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
-                "SELECT id, source_hash, source_filename, architecture, compiler_version, winning_pipeline, speedup_ratio, classification, loop_count, float_ops, memory_intensity, timestamp FROM knowledge_records ORDER BY id DESC"
+                "SELECT id, source_hash, source_filename, architecture, compiler_version, winning_pipeline, speedup_ratio, classification, evidence_grade, loop_count, float_ops, memory_intensity, timestamp FROM knowledge_records ORDER BY id DESC"
             )
             for row in cursor.fetchall():
                 records.append(
@@ -133,10 +148,11 @@ class KnowledgeStore:
                         winning_pipeline=json.loads(row[5]),
                         speedup_ratio=row[6],
                         classification=row[7],
-                        loop_count=row[8],
-                        float_ops=row[9],
-                        memory_intensity=row[10],
-                        timestamp=row[11],
+                        evidence_grade=row[8],
+                        loop_count=row[9],
+                        float_ops=row[10],
+                        memory_intensity=row[11],
+                        timestamp=row[12],
                     )
                 )
         return records
