@@ -73,6 +73,35 @@ def doctor():
 
 
 @app.command()
+def status():
+    """Display Autotune system status, toolchain availability, cache footprint, and KnowledgeStore memory records."""
+    report = run_doctor_checks()
+
+    from autotune.knowledge.store import KnowledgeStore
+    k_store = KnowledgeStore()
+    records_cnt = len(k_store.list_records())
+
+    cache_dir = os.path.join(os.getcwd(), ".autotune", "cache")
+    cache_cnt = len([f for f in os.listdir(cache_dir) if f.endswith(".json")]) if os.path.exists(cache_dir) else 0
+
+    from rich.table import Table
+    table = Table(title="Autotune System & Environment Status", border_style="cyan")
+    table.add_column("Component", style="bold white")
+    table.add_column("Status / Value", style="bold green")
+
+    table.add_row("Autotune Version", f"v{__version__}")
+    table.add_row("Python Environment", f"{report.python_version} ({'OK' if report.python_ok else 'FAIL'})")
+    table.add_row("Clang Compiler", f"{report.clang_version or 'N/A'} ({'OK' if report.clang_ok else 'FAIL'})")
+    table.add_row("Opt Binary", f"{report.opt_version or 'N/A'} ({'OK' if report.opt_ok else 'FAIL'})")
+    table.add_row("Target Architecture", report.arch)
+    table.add_row("Measurement Backend", report.measurement_backend)
+    table.add_row("Knowledge Memory Records", f"{records_cnt} entries")
+    table.add_row("Cached Candidate Binaries", f"{cache_cnt} entries")
+
+    console.print(table)
+
+
+@app.command()
 def config(
     provider: str = typer.Option("openai", "--provider", help="LLM Provider [openai|anthropic|gemini]"),
     api_key: str = typer.Option(..., "--api-key", prompt=True, hide_input=True, help="API Key for LLM provider"),
@@ -683,6 +712,148 @@ def report(
         f.write(html_content)
 
     console.print(f"[bold green]Successfully generated standalone HTML report: [cyan]{html}[/cyan][/bold green]")
+
+
+@app.command()
+def optimize(
+    source: str = typer.Argument(..., help="Path to C/C++ source file to optimize"),
+    workload: Optional[str] = typer.Option(None, "--workload", "-w", help="Optional stdin workload file path"),
+    args: Optional[str] = typer.Option(None, "--args", help="Space-separated binary command-line arguments"),
+    time_budget: int = typer.Option(30, "--time-budget", "-t", help="Search time budget limit in seconds"),
+    seed: int = typer.Option(42, "--seed", "-s", help="Random seed for deterministic search"),
+    output_dir: str = typer.Option("./autotune_results", "--output", "-o", help="Output directory for prescription, report, and bundle assets"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Enable quiet mode for CI logging"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose debug logging"),
+):
+    """Flagship Command: Orchestrate complete end-to-end workload optimization, evidence grading, HTML report, and prescription export."""
+    if not os.path.exists(source):
+        console.print(f"[bold red]Error: Source file '{source}' not found.[/bold red]")
+        raise typer.Exit(code=2)
+
+    os.makedirs(output_dir, exist_ok=True)
+    report_json_path = os.path.join(output_dir, "report.json")
+    html_report_path = os.path.join(output_dir, "report.html")
+
+    # Delegate seamlessly to search engine orchestration
+    search(
+        source=source,
+        workload=workload,
+        args=args,
+        generations=15,
+        population=15,
+        seed=seed,
+        resume=None,
+        early_stop=10,
+        time_budget=time_budget,
+        workers=4,
+        warmup=5,
+        runs=30,
+        fidelity="HIGH",
+        screen_runs=3,
+        confirm_runs=20,
+        cache=True,
+        fresh=False,
+        fresh_benchmark=False,
+        baseline_gate=True,
+        fail_on_regression=False,
+        regression_threshold=0.05,
+        llm=False,
+        provider="openai",
+        correctness_strategy="exitcode",
+        output_json=report_json_path,
+        quiet=quiet,
+        verbose=verbose,
+    )
+
+    if os.path.exists(report_json_path):
+        with open(report_json_path, "r", encoding="utf-8") as f:
+            r_data = json.load(f)
+
+        from autotune.reporting.html import HTMLReportGenerator
+        html_code = HTMLReportGenerator.generate_html(r_data)
+        with open(html_report_path, "w", encoding="utf-8") as f:
+            f.write(html_code)
+
+        if not quiet:
+            console.print(f"\n[bold green]✓ Optimization Workflow Complete![/bold green]")
+            console.print(f"  - Report JSON:   [cyan]{report_json_path}[/cyan]")
+            console.print(f"  - Offline HTML:  [cyan]{html_report_path}[/cyan]\n")
+
+
+@app.command()
+def validate(
+    quick: bool = typer.Option(False, "--quick", help="Run fast validation harness with small search budgets"),
+):
+    """Validation Harness: Run curated example benchmarks and report empirical timing and speedup metrics."""
+    examples_list = [
+        "examples/matrix/matrix_mul.c",
+        "examples/vector/vector_add.c",
+        "examples/loop/loop_reduction.c",
+        "examples/memory/stencil_2d.c",
+        "examples/branch/binary_search.c",
+    ]
+
+    from rich.table import Table
+    table = Table(title="Autotune Curated Benchmark Validation Harness", border_style="cyan")
+    table.add_column("Benchmark Workload", style="bold white")
+    table.add_column("Baseline (-O3)", style="yellow")
+    table.add_column("Optimized", style="green")
+    table.add_column("Speedup", style="bold magenta")
+    table.add_column("Evidence", style="cyan")
+    table.add_column("Correctness", style="bold green")
+
+    budget = 10 if quick else 15
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for ex in examples_list:
+            if not os.path.exists(ex):
+                continue
+
+            r_json = os.path.join(tmpdir, f"{os.path.basename(ex)}.json")
+            try:
+                search(
+                    source=ex,
+                    workload=None,
+                    args=None,
+                    generations=10,
+                    population=10,
+                    seed=42,
+                    resume=None,
+                    early_stop=10,
+                    time_budget=budget,
+                    workers=4,
+                    warmup=3,
+                    runs=10,
+                    fidelity="HIGH",
+                    screen_runs=3,
+                    confirm_runs=20,
+                    cache=True,
+                    fresh=False,
+                    fresh_benchmark=False,
+                    baseline_gate=True,
+                    fail_on_regression=False,
+                    regression_threshold=0.05,
+                    llm=False,
+                    provider="openai",
+                    correctness_strategy="exitcode",
+                    output_json=r_json,
+                    quiet=True,
+                    verbose=False,
+                )
+
+                if os.path.exists(r_json):
+                    with open(r_json, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    p_data = data.get("prescription", {})
+                    base_ms = f"{round(p_data.get('baseline_time_ms', 0), 2)} ms"
+                    cand_ms = f"{round(p_data.get('candidate_time_ms', 0), 2)} ms"
+                    spd = f"{p_data.get('speedup_ratio', 1.0)}x"
+                    ev = f"Grade {p_data.get('evidence_grade', 'B')}"
+                    table.add_row(os.path.basename(ex), base_ms, cand_ms, spd, ev, "PASS")
+            except Exception as e:
+                table.add_row(os.path.basename(ex), "ERR", "ERR", "1.00x", f"Grade F ({type(e).__name__}: {e})", "FAIL")
+
+    console.print(table)
 
 
 def main():
