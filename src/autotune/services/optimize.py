@@ -133,6 +133,8 @@ class OptimizeService:
             cand_stability = StabilityAnalyzer.analyze(cand_samples)
             real_cv_pct = round(cand_stability.cv * 100, 1)
 
+            grade = evidence_score.grade.value if hasattr(evidence_score.grade, "value") else str(evidence_score.grade)
+
             prescription = PrescriptionBuilder.build(
                 source_path=source,
                 output_binary="optimized_kernel.bin",
@@ -142,6 +144,7 @@ class OptimizeService:
                 baseline_time_ns=base_time_ns,
                 candidate_time_ns=cand_time_ns,
             )
+            prescription.evidence_grade = grade
 
             report_data: Dict[str, Any] = {
                 "run_id": run_id,

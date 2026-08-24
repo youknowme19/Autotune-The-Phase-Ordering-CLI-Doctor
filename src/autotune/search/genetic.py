@@ -536,8 +536,17 @@ class GeneticAlgorithmEngine:
         z_u = (u1 - mean_u) / std_u if std_u > 0 else 0.0
         p_val_mwu = 0.5 * math.erfc(abs(z_u) / math.sqrt(2))
 
-        # Save to Seed Archive and KnowledgeStore if confirmed speedup
-        if speedup > 1.0 and p_val_welch < 0.05:
+        from autotune.reporting.evidence import EvidenceEvaluator
+        score = EvidenceEvaluator.evaluate(
+            baseline_samples_ns=b_ns,
+            candidate_samples_ns=c_ns,
+            correctness_pass=getattr(winner, "correctness_success", True),
+            fresh_confirmation=True,
+        )
+        grade_str = score.grade.value if hasattr(score.grade, "value") else str(score.grade)
+
+        # Save to Seed Archive and KnowledgeStore if confirmed speedup (Grade A or B)
+        if grade_str in ("A", "B") and speedup >= 1.02:
             self.seed_mgr.save_seed(
                 pipeline=winner.sequence.passes,
                 source_workload_id=os.path.basename(source_path),
@@ -555,7 +564,7 @@ class GeneticAlgorithmEngine:
                 profiler = WorkloadProfiler()
                 prof = profiler.profile_file(source_path, architecture=getattr(self.compiler, "target_arch", "arm64"))
                 store = KnowledgeStore()
-                store.save_knowledge(profile=prof, winning_pipeline=winner.sequence.passes, speedup_ratio=speedup)
+                store.save_knowledge(profile=prof, winning_pipeline=winner.sequence.passes, speedup_ratio=speedup, evidence_grade=grade_str)
             except Exception:
                 pass
 
@@ -569,6 +578,8 @@ class GeneticAlgorithmEngine:
             "baseline_stddev_ms": b_std,
             "candidate_stddev_ms": c_std,
             "final_confirmation_speedup": speedup,
+            "evidence_grade": grade_str,
+            "evidence_score": score.model_dump(),
             "welch_t_stat": round(t_stat, 4),
             "welch_df": round(df, 1),
             "welch_p_value": p_val_welch,

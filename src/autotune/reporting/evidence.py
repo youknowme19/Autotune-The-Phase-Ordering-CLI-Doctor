@@ -112,22 +112,22 @@ class EvidenceEvaluator:
         if stat_sig:
             rationale.append(f"✓ Statistically significant improvement (p={round(p_val, 4)}).")
 
-        # Determine Evidence Grade
-        if stat_sig and fresh_confirmation and b_stable and low_noise and (cohens_d >= 0.8) and (speedup >= 1.05):
+        # Determine Evidence Grade with deterministic half-open intervals
+        if not correctness_pass or speedup < 0.98:
+            grade = EvidenceGrade.GRADE_F
+            rationale.append("Grade F: Confirmed performance regression or correctness failure.")
+        elif speedup < 1.02:
+            grade = EvidenceGrade.GRADE_D
+            rationale.append("Grade D: Baseline parity (-O3 equivalence).")
+        elif stat_sig and fresh_confirmation and b_stable and low_noise and (cohens_d >= 0.8) and (speedup >= 1.05):
             grade = EvidenceGrade.GRADE_A
             rationale.append("High-confidence Grade A scientific optimization evidence.")
         elif stat_sig and fresh_confirmation and (speedup >= 1.02):
             grade = EvidenceGrade.GRADE_B
             rationale.append("Solid Grade B confirmed speedup evidence.")
-        elif speedup > 1.0:
-            grade = EvidenceGrade.GRADE_C
-            rationale.append("Grade C: Marginal or noisy speedup.")
-        elif speedup >= 0.98:
-            grade = EvidenceGrade.GRADE_D
-            rationale.append("Grade D: Parity with baseline -O3.")
         else:
-            grade = EvidenceGrade.GRADE_F
-            rationale.append("Grade F: Confirmed performance regression.")
+            grade = EvidenceGrade.GRADE_C
+            rationale.append("Grade C: Marginal or noisy speedup (insufficient statistical confidence).")
 
         return EvidenceScore(
             grade=grade,

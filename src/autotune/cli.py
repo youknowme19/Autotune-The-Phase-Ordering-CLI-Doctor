@@ -323,6 +323,9 @@ def search(
                 baseline_time_ns=base_time,
                 candidate_time_ns=best.raw_time_ns,
             )
+            if final_confirmation and "evidence_grade" in final_confirmation:
+                prescription.evidence_grade = final_confirmation["evidence_grade"]
+
             print_search_results_summary(
                 prescription=prescription,
                 cache_hits=cache_mgr.cache_hits,

@@ -48,12 +48,9 @@ class PrescriptionBuilder:
         if candidate_time_ns <= 0 or baseline_time_ns <= 0:
             classification = ResultClassification.NO_VALID_CANDIDATE
             grade = "F"
-        elif speedup >= 1.05:
-            classification = ResultClassification.IMPROVED
-            grade = "A"
         elif speedup >= 1.02:
             classification = ResultClassification.IMPROVED
-            grade = "B"
+            grade = "B" if speedup < 1.05 else "A"
         elif speedup >= 0.98:
             classification = ResultClassification.TIE
             grade = "D"
