@@ -29,17 +29,23 @@ def test_optimize_service_run(tmp_path):
 def test_compare_service(tmp_path):
     rep_a = tmp_path / "rep_a.json"
     rep_a.write_text(json.dumps({
+        "search_speedup": 1.05,
+        "confirmed_speedup": 1.05,
         "prescription": {"speedup_ratio": 1.05, "classification": "IMPROVED", "evidence_grade": "B", "pass_sequence": {"passes": ["mem2reg"]}}
     }))
 
     rep_b = tmp_path / "rep_b.json"
     rep_b.write_text(json.dumps({
+        "search_speedup": 1.15,
+        "confirmed_speedup": 1.15,
         "prescription": {"speedup_ratio": 1.15, "classification": "IMPROVED", "evidence_grade": "A", "pass_sequence": {"passes": ["mem2reg", "sroa"]}}
     }))
 
     res = CompareService.compare_reports(str(rep_a), str(rep_b))
+    assert res.confirmed_speedup_a == 1.05
+    assert res.confirmed_speedup_b == 1.15
     assert res.speedup_diff == 0.1
-    assert "Report B outperformed" in res.summary
+    assert "Report B confirmed speedup" in res.summary
 
 
 def test_report_service(tmp_path):

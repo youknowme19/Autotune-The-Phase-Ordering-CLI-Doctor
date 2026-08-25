@@ -165,8 +165,8 @@ def test_performance_cache_hit_execution_metrics(tmp_path):
     perf_key = cache_mgr.compute_performance_key(
         compilation_key=comp_key,
         workload_content=None,
-        measurement_backend="auto",
-        warmup_runs=5,
+        measurement_backend=getattr(engine.runner, "platform_name", "auto"),
+        warmup_runs=2,
         repetitions=engine.screen_runs,
     )
 

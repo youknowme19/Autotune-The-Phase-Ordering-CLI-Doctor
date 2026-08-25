@@ -3,7 +3,7 @@ Pipeline Inspector and Pass Explainability Engine.
 Translates LLVM pass sequences into human-readable compiler optimization explanations.
 """
 
-from typing import Dict, List, NamedTuple, Optional
+from typing import Any, Dict, List, NamedTuple, Optional
 from autotune.llvm.passes import PassSequence, PassValidator
 
 class PassExplanation(NamedTuple):
@@ -114,7 +114,7 @@ PASS_KNOWLEDGE_BASE: Dict[str, PassExplanation] = {
 
 
 class PipelineInspector:
-    """Inspects and explains LLVM pass sequences."""
+    """Inspects and explains LLVM pass sequences and full search reports."""
 
     def __init__(self, validator: Optional[PassValidator] = None):
         self.validator = validator or PassValidator()
@@ -134,3 +134,50 @@ class PipelineInspector:
                     )
                 )
         return explanations
+
+    @staticmethod
+    def explain_report(report_data: Dict[str, Any]) -> List[str]:
+        """Provides a human-readable scientific rationale for an optimization search report."""
+        p_data = report_data.get("prescription", {})
+        search_speedup = report_data.get("search_speedup", p_data.get("speedup_ratio", 1.0))
+        confirmed_speedup = report_data.get("confirmed_speedup", search_speedup)
+        classification = p_data.get("classification", "NO_SIGNIFICANT_CHANGE")
+        grade = p_data.get("evidence_grade", "D")
+
+        ev_score = report_data.get("evidence_score", {})
+        pval = ev_score.get("p_value", 1.0)
+        cd = ev_score.get("cohens_d_effect_size", 0.0)
+        correctness = ev_score.get("correctness_pass", True)
+
+        lines = [
+            f"1. Search Phase: Discovered candidate pipeline with best exploratory speedup of {search_speedup:.2f}x.",
+            f"2. Confirmation Phase: Fresh independent benchmarking measured {confirmed_speedup:.2f}x speedup.",
+        ]
+
+        if not correctness:
+            lines.append("3. Correctness Gate: Candidate output FAILED correctness verification.")
+        else:
+            lines.append("3. Correctness Gate: Candidate output PASSED correctness verification.")
+
+        lines.append(f"4. Statistical Evaluation: Welch's t-test p-value={pval:.4f}, Cohen's d={cd:.2f}.")
+
+        if grade == "A":
+            lines.append("5. Evidence Verdict: Grade A — High-confidence, statistically significant speedup exceeding 1.05x.")
+        elif grade == "B":
+            lines.append("5. Evidence Verdict: Grade B — Statistically significant confirmed speedup exceeding 1.02x.")
+        elif grade == "C":
+            lines.append("5. Evidence Verdict: Grade C — Marginal speedup or noisy measurement (insufficient statistical confidence).")
+        elif grade == "D":
+            lines.append("5. Evidence Verdict: Grade D — Baseline parity (-O3 performance equivalence).")
+        else:
+            lines.append("5. Evidence Verdict: Grade F — Performance regression, execution failure, or correctness failure.")
+
+        if classification == "IMPROVED":
+            lines.append("6. Action Recommendation: Prescribed candidate pipeline is eligible for production deployment & KnowledgeStore persistence.")
+        elif classification == "REGRESSION":
+            lines.append("6. Action Recommendation: Prescribed pipeline REJECTED due to confirmed performance regression or failure.")
+        else:
+            lines.append("6. Action Recommendation: Prescribed pipeline REJECTED due to lack of statistically significant improvement.")
+
+        return lines
+

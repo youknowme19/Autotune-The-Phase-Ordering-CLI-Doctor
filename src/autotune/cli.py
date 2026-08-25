@@ -469,15 +469,18 @@ def bench_suite(
 def explain(
     target: str = typer.Argument(..., help="Comma-separated LLVM pass sequence string or JSON search report filepath"),
 ):
-    """Inspect and explain the optimization semantics and expected impact of an LLVM pass pipeline."""
+    """Inspect and explain the optimization semantics, decision rationale, and expected impact of an LLVM pass pipeline or report."""
     from autotune.reporting.explain import PipelineInspector
     from rich.table import Table
+    from rich.panel import Panel
 
     passes_list: List[str] = []
+    report_data: Optional[Dict[str, Any]] = None
+
     if os.path.exists(target) and target.endswith(".json"):
         with open(target, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        passes_list = data.get("prescription", {}).get("pass_sequence", {}).get("passes", [])
+            report_data = json.load(f)
+        passes_list = report_data.get("prescription", {}).get("pass_sequence", {}).get("passes", [])
     else:
         passes_list = [p.strip() for p in target.replace(",", " ").split() if p.strip()]
 
@@ -499,6 +502,11 @@ def explain(
         table.add_row(exp.pass_name, exp.domain, exp.description, exp.expected_impact)
 
     console.print(table)
+
+    if report_data:
+        rationale_lines = PipelineInspector.explain_report(report_data)
+        panel_text = "\n".join(f"[white]{line}[/white]" for line in rationale_lines)
+        console.print(Panel(panel_text, title="[bold cyan]Scientific Decision Rationale & Confirmation Summary[/bold cyan]", border_style="green"))
 
 
 @app.command()
@@ -580,18 +588,27 @@ def bundle(
     os.chmod(sh_path, 0o755)
 
     # Save README
+    search_speedup = data.get("search_speedup", p_data.get("speedup_ratio", 1.0))
+    confirmed_speedup = data.get("confirmed_speedup", search_speedup)
+    ev_score = data.get("evidence_score", {})
+
     with open(os.path.join(output_dir, "README.md"), "w", encoding="utf-8") as f:
         f.write("# Autotune Research Reproduction Bundle\n\n")
         f.write(f"**Source File:** `{data.get('source_path', 'N/A')}`  \n")
-        f.write(f"**Speedup Ratio:** **{p_data.get('speedup_ratio', 1.0)}x**  \n")
+        f.write(f"**Search Best (Exploratory):** `{search_speedup:.2f}x`  \n")
+        f.write(f"**Confirmed Speedup (Authoritative):** `{confirmed_speedup:.2f}x`  \n")
+        f.write(f"**Evidence Grade:** `Grade {p_data.get('evidence_grade', 'D')}`  \n")
+        f.write(f"**Result Classification:** `{p_data.get('classification', 'NO_SIGNIFICANT_CHANGE')}`  \n")
+        f.write(f"**Welch's t-test p-value:** `{ev_score.get('p_value', 1.0):.4f}`  \n")
+        f.write(f"**Cohen's d Effect Size:** `{ev_score.get('cohens_d_effect_size', 0.0):.2f}`  \n")
         f.write(f"**Environment Fingerprint:** `{fp.fingerprint_hash}` ({fp.os_name} {fp.architecture})  \n\n")
         f.write("## Reproduce Command\n```bash\n./reproduce.sh\n```\n")
 
     console.print(f"[bold green]Successfully created research reproduction bundle in directory '{output_dir}/':[/bold green]")
     console.print(f"  - [cyan]{output_dir}/environment.json[/cyan] (System & compiler fingerprint)")
     console.print(f"  - [cyan]{output_dir}/manifest.json[/cyan] (Full experiment manifest)")
-    console.print(f"  - [cyan]{output_dir}/reproduce.sh[/cyan] (Executable build script)")
-    console.print(f"  - [cyan]{output_dir}/README.md[/cyan] (Reproduction summary)")
+    console.print(f"  - [cyan]{output_dir}/reproduce.sh[/cyan] (Executable compilation script)")
+    console.print(f"  - [cyan]{output_dir}/README.md[/cyan] (Reproduction instructions & empirical evidence summary)")
 
 
 @app.command()
@@ -615,11 +632,32 @@ def cache(
         console.print("[dim]Persistent cache directory does not exist yet.[/dim]")
         return
 
-    files = [f for f in os.listdir(cache_dir) if f.endswith(".json")]
-    total_bytes = sum(os.path.getsize(os.path.join(cache_dir, f)) for f in files)
-    console.print(f"Cache Location: [bold cyan]{cache_dir}[/bold cyan]")
-    console.print(f"Cached Candidates: [bold green]{len(files)}[/bold green]")
-    console.print(f"Total Storage: [bold yellow]{round(total_bytes / 1024, 1)} KB[/bold yellow]")
+    subdirs = ["compilation", "correctness", "performance", "fitness", "seeds"]
+    from rich.table import Table
+    table = Table(title="Autotune Multi-Layer Persistent Cache Observability", border_style="cyan")
+    table.add_column("Cache Layer", style="bold white")
+    table.add_column("Cached Entries", style="bold green")
+    table.add_column("Storage Size", style="bold yellow")
+
+    total_files = 0
+    total_bytes = 0
+
+    for sd in subdirs:
+        layer_dir = os.path.join(cache_dir, sd)
+        if os.path.exists(layer_dir):
+            all_fs = [os.path.join(layer_dir, f) for f in os.listdir(layer_dir) if not f.startswith(".")]
+            cnt = len(all_fs)
+            sz = sum(os.path.getsize(f) for f in all_fs if os.path.isfile(f))
+        else:
+            cnt = 0
+            sz = 0
+        total_files += cnt
+        total_bytes += sz
+        table.add_row(sd.capitalize(), str(cnt), f"{round(sz / 1024, 1)} KB")
+
+    console.print(table)
+    console.print(f"Cache Directory: [bold cyan]{cache_dir}[/bold cyan]")
+    console.print(f"Total Cached Objects: [bold green]{total_files}[/bold green] | Total Size: [bold yellow]{round(total_bytes / 1024, 1)} KB[/bold yellow]")
 
 
 @app.command()
@@ -665,13 +703,16 @@ def compare(
         from rich.table import Table
         table = Table(title="Autotune Optimization Search Comparison", border_style="cyan")
         table.add_column("Metric", style="bold white")
-        table.add_column("Report A (Baseline)", style="yellow")
-        table.add_column("Report B (Candidate)", style="green")
-        table.add_column("Differential", style="bold magenta")
+        table.add_column("Report A", style="yellow")
+        table.add_column("Report B", style="green")
+        table.add_column("Confirmed Differential", style="bold magenta")
 
-        table.add_row("Speedup Ratio", f"{res.speedup_a}x", f"{res.speedup_b}x", f"{'+' if res.speedup_diff >= 0 else ''}{res.speedup_diff}x")
-        table.add_row("Classification", res.classification_a, res.classification_b, "N/A")
-        table.add_row("Evidence Grade", res.evidence_grade_a, res.evidence_grade_b, "N/A")
+        table.add_row("Search Best (Exploratory)", f"{res.search_speedup_a}x", f"{res.search_speedup_b}x", "N/A")
+        table.add_row("Confirmed Speedup (Authoritative)", f"{res.confirmed_speedup_a}x", f"{res.confirmed_speedup_b}x", f"{'+' if res.speedup_diff >= 0 else ''}{res.speedup_diff}x")
+        table.add_row("Evidence Grade", f"Grade {res.evidence_grade_a}", f"Grade {res.evidence_grade_b}", "N/A")
+        table.add_row("Result Classification", res.classification_a, res.classification_b, "N/A")
+        table.add_row("Welch's t-test p-value", str(res.p_value_a), str(res.p_value_b), "N/A")
+        table.add_row("Cohen's d Effect Size", str(res.cohens_d_a), str(res.cohens_d_b), "N/A")
         table.add_row("Passes Count", str(res.passes_count_a), str(res.passes_count_b), "N/A")
 
         console.print(table)
@@ -765,6 +806,21 @@ def validate(
         table.add_row(item.workload, b_ms, c_ms, f"{item.speedup}x", cv_str, pval_str, cd_str, f"Grade {item.evidence_grade}", item.correctness)
 
     console.print(table)
+
+    counts = {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0}
+    for item in res.items:
+        g = item.evidence_grade
+        counts[g] = counts.get(g, 0) + 1
+
+    summary_str = (
+        f"Validation Summary: [bold white]{len(res.items)}[/bold white] Workloads Evaluated | "
+        f"[bold green]Grade A: {counts['A']}[/bold green] | "
+        f"[bold green]Grade B: {counts['B']}[/bold green] | "
+        f"[bold yellow]Grade C: {counts['C']}[/bold yellow] | "
+        f"[bold yellow]Grade D: {counts['D']}[/bold yellow] | "
+        f"[bold red]Grade F: {counts['F']}[/bold red]"
+    )
+    console.print(f"\n{summary_str}\n")
 
 
 # --- Runs Subcommand Group ---

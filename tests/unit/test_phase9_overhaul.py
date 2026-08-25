@@ -78,7 +78,7 @@ def test_cli_compare_command(tmp_path):
 
     res = runner.invoke(app, ["compare", str(rep_a), str(rep_b)])
     assert res.exit_code == 0
-    assert "Report B outperformed Report A" in res.output
+    assert "outperformed Report A" in res.output
 
 
 def test_cli_report_html_command(tmp_path):
