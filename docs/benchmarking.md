@@ -6,7 +6,7 @@ This document details Autotune's latency measurement mechanics, timing backends,
 
 ## ⏱️ In-Process High-Precision Monotonic Timing
 
-Autotune measures execution latency using in-process monotonic timing markers ([`src/autotune/sandbox/executor.py`](file:///Volumes/SSD/autotune/src/autotune/sandbox/executor.py) & [`src/autotune/benchmark/macos.py`](file:///Volumes/SSD/autotune/src/autotune/benchmark/macos.py)).
+Autotune measures execution latency using in-process monotonic timing markers ([`src/autotune/sandbox/executor.py`](../src/autotune/sandbox/executor.py) & [`src/autotune/benchmark/macos.py`](../src/autotune/benchmark/macos.py)).
 
 ### Microsecond Marker Injection:
 The benchmark harness wraps workload execution loops with microsecond timing probes:

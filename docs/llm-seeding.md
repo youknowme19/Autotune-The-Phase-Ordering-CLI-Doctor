@@ -13,7 +13,7 @@ LLMs (OpenAI, Anthropic, Gemini) act strictly as **Generation 0 seed proposal ge
 
 ---
 
-## 🔍 AST Feature Prompt Extraction ([`src/autotune/analysis/features.py`](file:///Volumes/SSD/autotune/src/autotune/analysis/features.py))
+## 🔍 AST Feature Prompt Extraction ([`src/autotune/analysis/features.py`](../src/autotune/analysis/features.py))
 
 Before invoking an LLM, `FeatureExtractor` extracts compact structural metadata from Clang AST dumps:
 

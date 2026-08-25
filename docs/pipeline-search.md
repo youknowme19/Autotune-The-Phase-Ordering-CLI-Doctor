@@ -8,13 +8,12 @@ This document describes Autotune's LLVM pass sequence representation, canonicali
 
 LLVM's New Pass Manager (NPM) structures transformations into pass pipelines passed to `opt -passes='...'`.
 
-### Pipeline Representation ([`src/autotune/llvm/passes.py`](file:///Volumes/SSD/autotune/src/autotune/llvm/passes.py))
-A candidate pipeline is represented by `PassSequence(passes=[...])`.
+### Pipeline Representation ([`src/autotune/llvm/passes.py`](../src/autotune/llvm/passes.py))
+An individual pass sequence is encapsulated as a `PassSequence` object:
+- Enforces vocabulary validation against `KNOWN_LLVM_PASSES`.
+- Rejects pass sequences with illegal characters or invalid LLVM pass names.
 
-Example pass list:
-`['gvn', 'sccp', 'mem2reg', 'lower-atomic', 'mem2reg']`
-
-### Canonicalization ([`CanonicalPassNormalizer`](file:///Volumes/SSD/autotune/src/autotune/llvm/passes.py))
+### Canonicalization ([`CanonicalPassNormalizer`](../src/autotune/llvm/passes.py))
 `CanonicalPassNormalizer.normalize()` converts pass lists into NPM pipeline strings:
 `function(gvn,sccp,mem2reg,lower-atomic,mem2reg)`
 

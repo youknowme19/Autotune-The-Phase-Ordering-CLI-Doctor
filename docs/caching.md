@@ -48,7 +48,7 @@ Cache identities are strictly disaggregated to prevent invalidation cascades:
 
 When running parallel search workers (`--workers 4`), non-atomic file writes can cause race conditions or truncated JSON reads.
 
-Autotune enforces **atomic file operations** across all cache publications ([`src/autotune/search/persistent_cache.py`](file:///Volumes/SSD/autotune/src/autotune/search/persistent_cache.py)):
+Autotune enforces **atomic file operations** across all cache publications ([`src/autotune/search/persistent_cache.py`](../src/autotune/search/persistent_cache.py)):
 
 ```python
 def _atomic_write_json(filepath: str, data: Dict[str, Any]) -> None:

@@ -10,7 +10,7 @@ Performance optimization is useless if it alters program behavior. Autotune enfo
 
 ---
 
-## 🔌 Pluggable Correctness Strategies ([`src/autotune/benchmark/correctness.py`](file:///Volumes/SSD/autotune/src/autotune/benchmark/correctness.py))
+## 🔌 Pluggable Correctness Strategies ([`src/autotune/benchmark/correctness.py`](../src/autotune/benchmark/correctness.py))
 
 Autotune delegates output validation to implementations of `CorrectnessStrategy`:
 

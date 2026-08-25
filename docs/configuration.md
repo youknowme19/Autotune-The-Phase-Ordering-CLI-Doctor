@@ -8,15 +8,15 @@ Autotune parameters can be configured via CLI flags, environment variables, or c
 
 | Parameter | Type | Default | Allowed Values | Source File / Implementation | Description |
 |---|---|---|---|---|---|
-| `population_size` | `int` | `10` | $\ge 2$ | [`GeneticAlgorithmEngine`](file:///Volumes/SSD/autotune/src/autotune/search/genetic.py) | Number of candidate pass sequences in GA population. |
-| `generations` | `int` | `5` | $\ge 1$ | [`GeneticAlgorithmEngine`](file:///Volumes/SSD/autotune/src/autotune/search/genetic.py) | Number of generational evolution cycles. |
-| `seed` | `int` | `42` | Any int | [`GeneticAlgorithmEngine`](file:///Volumes/SSD/autotune/src/autotune/search/genetic.py) | Random seed for population initialization and mutation operators. |
-| `workers` | `int` | `4` | $\ge 1$ | [`GeneticAlgorithmEngine`](file:///Volumes/SSD/autotune/src/autotune/search/genetic.py) | Parallel evaluation workers (`ThreadPoolExecutor`). |
-| `fidelity` | `str` | `LOW` | `LOW`, `MEDIUM`, `HIGH` | [`GeneticAlgorithmEngine`](file:///Volumes/SSD/autotune/src/autotune/search/genetic.py) | Evaluation fidelity stage. |
-| `screen_runs` | `int` | `3` | $\ge 1$ | [`GeneticAlgorithmEngine`](file:///Volumes/SSD/autotune/src/autotune/search/genetic.py) | Number of timing repetitions during `LOW` fidelity screening. |
-| `confirm_runs` | `int` | `20` | $\ge 1$ | [`GeneticAlgorithmEngine`](file:///Volumes/SSD/autotune/src/autotune/search/genetic.py) | Number of timing repetitions during final confirmation. |
-| `baseline_gate` | `bool` | `True` | `True`, `False` | [`GeneticAlgorithmEngine`](file:///Volumes/SSD/autotune/src/autotune/search/genetic.py) | Enable baseline gate candidate pruning. |
-| `gate_threshold` | `float` | `0.80` | $> 0.0$ | [`GeneticAlgorithmEngine`](file:///Volumes/SSD/autotune/src/autotune/search/genetic.py) | Pruning cutoff threshold ($\text{normalized\_speed} < 0.80$). |
+| `population_size` | `int` | `10` | $\ge 2$ | [`GeneticAlgorithmEngine`](../src/autotune/search/genetic.py) | Number of candidate pass sequences in GA population. |
+| `generations` | `int` | `5` | $\ge 1$ | [`GeneticAlgorithmEngine`](../src/autotune/search/genetic.py) | Number of generational evolution cycles. |
+| `seed` | `int` | `42` | Any int | [`GeneticAlgorithmEngine`](../src/autotune/search/genetic.py) | Random seed for population initialization and mutation operators. |
+| `workers` | `int` | `4` | $\ge 1$ | [`GeneticAlgorithmEngine`](../src/autotune/search/genetic.py) | Parallel evaluation workers (`ThreadPoolExecutor`). |
+| `fidelity` | `str` | `LOW` | `LOW`, `MEDIUM`, `HIGH` | [`GeneticAlgorithmEngine`](../src/autotune/search/genetic.py) | Evaluation fidelity stage. |
+| `screen_runs` | `int` | `3` | $\ge 1$ | [`GeneticAlgorithmEngine`](../src/autotune/search/genetic.py) | Number of timing repetitions during `LOW` fidelity screening. |
+| `confirm_runs` | `int` | `20` | $\ge 1$ | [`GeneticAlgorithmEngine`](../src/autotune/search/genetic.py) | Number of timing repetitions during final confirmation. |
+| `baseline_gate` | `bool` | `True` | `True`, `False` | [`GeneticAlgorithmEngine`](../src/autotune/search/genetic.py) | Enable baseline gate candidate pruning. |
+| `gate_threshold` | `float` | `0.80` | $> 0.0$ | [`GeneticAlgorithmEngine`](../src/autotune/search/genetic.py) | Pruning cutoff threshold ($\text{normalized\_speed} < 0.80$). |
 
 ---
 
