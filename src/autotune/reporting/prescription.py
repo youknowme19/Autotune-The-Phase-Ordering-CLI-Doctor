@@ -31,6 +31,7 @@ class PrescriptionBuilder:
         opt_path: Optional[str],
         baseline_time_ns: float,
         candidate_time_ns: float,
+        evidence_grade: Optional[str] = None,
     ) -> CompilerPrescription:
         passes_joined = ",".join(pass_sequence.passes) if pass_sequence.passes else "mem2reg"
         
@@ -48,9 +49,15 @@ class PrescriptionBuilder:
         if candidate_time_ns <= 0 or baseline_time_ns <= 0:
             classification = ResultClassification.NO_VALID_CANDIDATE
             grade = "F"
+        elif evidence_grade in ("C", "D", "F"):
+            grade = evidence_grade
+            if grade == "F" or speedup < 0.98:
+                classification = ResultClassification.REGRESSION
+            else:
+                classification = ResultClassification.TIE
         elif speedup >= 1.02:
             classification = ResultClassification.IMPROVED
-            grade = "B" if speedup < 1.05 else "A"
+            grade = evidence_grade or ("B" if speedup < 1.05 else "A")
         elif speedup >= 0.98:
             classification = ResultClassification.TIE
             grade = "D"

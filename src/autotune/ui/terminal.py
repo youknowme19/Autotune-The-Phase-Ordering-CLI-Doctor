@@ -164,22 +164,19 @@ def print_search_results_summary(
     pct_improvement = round((1.0 - (prescription.candidate_time_ms / max(prescription.baseline_time_ms, 1e-3))) * 100, 1)
     
     cls_val = getattr(prescription.classification, "value", str(prescription.classification))
-    if cls_val == "IMPROVED":
+    grade = getattr(prescription, "evidence_grade", "F")
+    if cls_val == "IMPROVED" and grade in ("A", "B"):
         diag = "Workload appears sensitive to LLVM phase ordering."
         obs = f"{prescription.speedup_ratio}x faster than -O3 ({pct_improvement}% reduction)"
         style = "green"
-    elif cls_val == "NO_SIGNIFICANT_CHANGE":
-        diag = "Workload performance is at parity with baseline -O3."
-        obs = f"1.00x (Parity with -O3)"
-        style = "yellow"
-    elif cls_val == "REGRESSION":
-        diag = "Custom pass sequences regressed compared to baseline -O3."
-        obs = f"{prescription.speedup_ratio}x ({abs(pct_improvement)}% slower)"
+    elif cls_val == "REGRESSION" or grade == "F":
+        diag = "Custom pass sequences regressed or failed confirmation. NO RECOMMENDATION PRODUCED."
+        obs = f"REJECTED / NOT CONFIRMED ({prescription.speedup_ratio}x)"
         style = "red"
     else:
-        diag = "No valid candidate pass sequence passed correctness and performance gates."
-        obs = "N/A"
-        style = "bold red"
+        diag = "Workload performance is at parity or unconfirmed with baseline -O3."
+        obs = f"REJECTED / UNCONFIRMED ({prescription.speedup_ratio}x)"
+        style = "yellow"
 
     passes_str = " → ".join(prescription.pass_sequence.passes) if prescription.pass_sequence.passes else "mem2reg"
     total_evals = cache_hits + cache_misses

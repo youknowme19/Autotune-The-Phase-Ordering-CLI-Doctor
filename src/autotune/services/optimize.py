@@ -30,6 +30,8 @@ class OptimizeResult(BaseModel):
     run_id: str
     source_path: str
     speedup_ratio: float
+    search_speedup: float = 1.0
+    confirmed_speedup: float = 1.0
     classification: str
     evidence_grade: str
     baseline_time_ms: float
@@ -112,6 +114,7 @@ class OptimizeService:
             best = pop.best_individual()
             winning_passes = best.sequence.passes if (best and best.is_valid) else []
             cand_time_ns = best.raw_time_ns if (best and best.is_valid and best.raw_time_ns) else base_time_ns
+            search_speedup = round(base_time_ns / cand_time_ns, 2) if cand_time_ns > 0 else 1.0
 
             # Measure candidate samples if valid candidate exists
             if best and best.is_valid and best.raw_time_ns:
@@ -132,8 +135,8 @@ class OptimizeService:
 
             cand_stability = StabilityAnalyzer.analyze(cand_samples)
             real_cv_pct = round(cand_stability.cv * 100, 1)
-
             grade = evidence_score.grade.value if hasattr(evidence_score.grade, "value") else str(evidence_score.grade)
+            confirmed_speedup = evidence_score.speedup_ratio
 
             prescription = PrescriptionBuilder.build(
                 source_path=source,
@@ -142,15 +145,20 @@ class OptimizeService:
                 clang_path=doc_report.clang_path or "clang",
                 opt_path=doc_report.opt_path,
                 baseline_time_ns=base_time_ns,
-                candidate_time_ns=cand_time_ns,
+                candidate_time_ns=cand_stability.median_time_ns if (cand_stability and cand_stability.median_time_ns > 0) else cand_time_ns,
+                evidence_grade=grade,
             )
             prescription.evidence_grade = grade
+
+            final_cls_str = getattr(prescription.classification, "value", str(prescription.classification))
 
             report_data: Dict[str, Any] = {
                 "run_id": run_id,
                 "source_path": source,
                 "generations_searched": engine.generations,
                 "population_size": 15,
+                "search_speedup": search_speedup,
+                "confirmed_speedup": confirmed_speedup,
                 "prescription": prescription.model_dump(),
                 "evidence_score": evidence_score.model_dump(),
                 "workload_profile": w_profile.model_dump(),
@@ -183,7 +191,9 @@ class OptimizeService:
                 run_id=run_id,
                 source_path=source,
                 speedup_ratio=prescription.speedup_ratio,
-                classification=prescription.classification,
+                search_speedup=search_speedup,
+                confirmed_speedup=confirmed_speedup,
+                classification=final_cls_str,
                 evidence_grade=grade,
                 baseline_time_ms=prescription.baseline_time_ms,
                 candidate_time_ms=prescription.candidate_time_ms,

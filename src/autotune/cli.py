@@ -721,11 +721,16 @@ def optimize(
         )
         if not quiet:
             console.print(f"\n[bold green]✓ Optimization Workflow Complete![/bold green]")
-            console.print(f"  - Run ID:        [bold cyan]{res.run_id}[/bold cyan]")
-            console.print(f"  - Speedup Ratio: [bold yellow]{res.speedup_ratio}x[/bold yellow] ({res.classification})")
-            console.print(f"  - Evidence:      [bold green]Grade {res.evidence_grade}[/bold green]")
-            console.print(f"  - Report JSON:   [cyan]{res.report_json_path}[/cyan]")
-            console.print(f"  - Offline HTML:  [cyan]{res.report_html_path}[/cyan]\n")
+            console.print(f"  - Run ID:            [bold cyan]{res.run_id}[/bold cyan]")
+            if res.evidence_grade in ("C", "D", "F") or res.classification != "IMPROVED":
+                console.print(f"  - Search Best:       [yellow]{res.search_speedup}x[/yellow]")
+                console.print(f"  - Confirmed Speedup: [bold red]{res.confirmed_speedup}x (REJECTED / NOT CONFIRMED)[/bold red]")
+                console.print(f"  - Classification:    [bold red]{res.classification}[/bold red]")
+            else:
+                console.print(f"  - Speedup Ratio:     [bold yellow]{res.speedup_ratio}x[/bold yellow] ({res.classification})")
+            console.print(f"  - Evidence:          [bold green]Grade {res.evidence_grade}[/bold green]")
+            console.print(f"  - Report JSON:       [cyan]{res.report_json_path}[/cyan]")
+            console.print(f"  - Offline HTML:      [cyan]{res.report_html_path}[/cyan]\n")
     except Exception as e:
         console.print(f"[bold red]Error: {e}[/bold red]")
         raise typer.Exit(code=1)
