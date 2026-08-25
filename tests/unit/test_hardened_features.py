@@ -167,7 +167,7 @@ def test_performance_cache_hit_execution_metrics(tmp_path):
         workload_content=None,
         measurement_backend="auto",
         warmup_runs=5,
-        repetitions=20,
+        repetitions=engine.screen_runs,
     )
 
     # Pre-populate compilation, correctness, and performance caches
