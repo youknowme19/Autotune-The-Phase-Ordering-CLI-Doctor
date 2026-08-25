@@ -6,7 +6,7 @@ This guide explains how to extend Autotune's LLVM pass vocabulary, correctness s
 
 ## 1. Adding New LLVM Passes
 
-Pass vocabulary is managed in [`src/autotune/llvm/passes.py`](file:///Volumes/SSD/autotune/src/autotune/llvm/passes.py).
+Pass vocabulary is managed in [`src/autotune/llvm/passes.py`](../src/autotune/llvm/passes.py).
 
 To register a new LLVM pass:
 1. Add the pass name to `KNOWN_LLVM_PASSES`:
@@ -22,7 +22,7 @@ To register a new LLVM pass:
 ## 2. Adding a New Correctness Validator
 
 To implement a custom output validator:
-1. Subclass `CorrectnessStrategy` in [`src/autotune/benchmark/correctness.py`](file:///Volumes/SSD/autotune/src/autotune/benchmark/correctness.py):
+1. Subclass `CorrectnessStrategy` in [`src/autotune/benchmark/correctness.py`](../src/autotune/benchmark/correctness.py):
    ```python
    class MyCustomValidator(CorrectnessStrategy):
        def verify(
@@ -38,4 +38,4 @@ To implement a custom output validator:
 
 ## 3. Adding a Custom Performance Runner
 
-Subclass `PerformanceRunner` in [`src/autotune/benchmark/base.py`](file:///Volumes/SSD/autotune/src/autotune/benchmark/base.py) to add support for new hardware profiling backends (e.g., Linux `perf_event_open`).
+Subclass `PerformanceRunner` in [`src/autotune/benchmark/base.py`](../src/autotune/benchmark/base.py) to add support for new hardware profiling backends (e.g., Linux `perf_event_open`).

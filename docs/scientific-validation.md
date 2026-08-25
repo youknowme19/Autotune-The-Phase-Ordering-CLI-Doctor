@@ -6,7 +6,7 @@ This document summarizes the official, frozen empirical validation findings of t
 
 ## 🧪 Validated Primary Result (`matrix_transpose`)
 
-- **Workload**: [`examples/matrix_transpose/kernel.c`](file:///Volumes/SSD/autotune/examples/matrix_transpose/kernel.c) ($N=512$, $100$ iterations)
+- **Workload**: [`examples/matrix_transpose/kernel.c`](../examples/matrix_transpose/kernel.c) ($N=512$, $100$ iterations)
 - **Winning Pass Sequence**: `['gvn', 'mem2reg', 'invalidate<all>', 'gvn', 'gvn-hoist']`
 - **Canonical NPM Pipeline**: `function(gvn,mem2reg,invalidate<all>,gvn,gvn-hoist)`
 - **Phase G Confirmation Protocol**: 100 warmups per binary, 100 baseline + 100 candidate fresh timing measurements with deterministic random interleaving (seed 42).
