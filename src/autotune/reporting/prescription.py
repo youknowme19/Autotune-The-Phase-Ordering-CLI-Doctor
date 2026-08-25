@@ -26,29 +26,33 @@ class PrescriptionBuilder:
     def build(
         source_path: str,
         output_binary: str,
-        pass_sequence: PassSequence,
+        pass_sequence: Optional[PassSequence],
         clang_path: str,
         opt_path: Optional[str],
         baseline_time_ns: float,
         candidate_time_ns: float,
         evidence_grade: Optional[str] = None,
     ) -> CompilerPrescription:
-        passes_joined = ",".join(pass_sequence.passes) if pass_sequence.passes else "mem2reg"
+        safe_seq = pass_sequence if (pass_sequence is not None and isinstance(pass_sequence, PassSequence)) else PassSequence(passes=[])
+        passes_joined = ",".join(safe_seq.passes) if safe_seq.passes else ""
         
-        if opt_path:
+        if passes_joined and opt_path:
             opt_cmd = f"{opt_path} -passes='{passes_joined}' input.ll -S -o output.ll"
             clang_cmd = f"{clang_path} -O0 -Xclang -disable-O0-optnone -emit-llvm -S {source_path} -o - | {opt_path} -passes='{passes_joined}' -S -o - | {clang_path} -x assembler - -o {output_binary}"
-        else:
+        elif passes_joined:
             opt_cmd = None
             clang_cmd = f"{clang_path} -O2 -mllvm -passes='{passes_joined}' {source_path} -o {output_binary}"
+        else:
+            opt_cmd = None
+            clang_cmd = f"{clang_path} -O3 {source_path} -o {output_binary}"
 
         b_ms = round(baseline_time_ns / 1e6, 3)
         c_ms = round(candidate_time_ns / 1e6, 3)
         speedup = round(baseline_time_ns / candidate_time_ns, 2) if candidate_time_ns > 0 else 1.0
 
-        if candidate_time_ns <= 0 or baseline_time_ns <= 0:
-            classification = ResultClassification.NO_VALID_CANDIDATE
-            grade = "F"
+        if candidate_time_ns <= 0 or baseline_time_ns <= 0 or not passes_joined:
+            classification = ResultClassification.NO_VALID_CANDIDATE if not passes_joined else ResultClassification.REGRESSION
+            grade = evidence_grade or "F"
         elif evidence_grade in ("C", "D", "F"):
             grade = evidence_grade
             if grade == "F" or speedup < 0.98:
@@ -66,7 +70,7 @@ class PrescriptionBuilder:
             grade = "F"
 
         return CompilerPrescription(
-            pass_sequence=pass_sequence,
+            pass_sequence=safe_seq,
             reproducible_clang_command=clang_cmd,
             reproducible_opt_command=opt_cmd,
             baseline_time_ms=b_ms,

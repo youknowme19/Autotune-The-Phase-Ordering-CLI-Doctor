@@ -3,6 +3,7 @@ Unit tests for baseline-normalized fitness, multi-fidelity screening, final conf
 """
 
 import os
+import platform
 import tempfile
 import pytest
 
@@ -155,8 +156,8 @@ def test_performance_cache_hit_execution_metrics(tmp_path):
         compiler_path=engine.compiler.clang_path,
         compiler_version=engine.compiler.clang_version or "clang",
         opt_version=engine.compiler.opt_version or "opt",
-        target_arch="arm64",
-        os_name="Darwin",
+        target_arch=platform.machine(),
+        os_name=platform.system(),
     )
     corr_key = cache_mgr.compute_correctness_key(
         compilation_key=comp_key,
