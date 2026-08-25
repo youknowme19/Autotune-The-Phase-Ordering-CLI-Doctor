@@ -140,6 +140,7 @@ def test_performance_cache_hit_execution_metrics(tmp_path):
         compiler=CompilerDriver(),
         runner=get_performance_runner(),
         cache_manager=cache_mgr,
+        fidelity="LOW",
     )
     seq = PassSequence(passes=["mem2reg"])
     ind = Individual(sequence=seq)
