@@ -340,6 +340,17 @@ def search(
 
         else:
             console.print("\n[bold yellow]No valid candidates outperform baseline.[/bold yellow]")
+            from autotune.reporting.prescription import PrescriptionBuilder
+            prescription = PrescriptionBuilder.build(
+                source_path=source,
+                output_binary="baseline.bin",
+                pass_sequence=None,
+                clang_path=doc_report.clang_path or "clang",
+                opt_path=doc_report.opt_path,
+                baseline_time_ns=base_time,
+                candidate_time_ns=base_time,
+                evidence_grade="D",
+            )
 
         run_id = f"run_{int(time.time())}"
         manifest_dir = ExperimentManifestExporter.export_run(
@@ -480,7 +491,33 @@ def explain(
     if os.path.exists(target) and target.endswith(".json"):
         with open(target, "r", encoding="utf-8") as f:
             report_data = json.load(f)
-        passes_list = report_data.get("prescription", {}).get("pass_sequence", {}).get("passes", [])
+        p_dict = report_data.get("prescription") or {}
+        seq_dict = p_dict.get("pass_sequence") or {} if isinstance(p_dict, dict) else {}
+        passes_list = seq_dict.get("passes", []) if isinstance(seq_dict, dict) else []
+
+        if passes_list:
+            seq = PassSequence(passes=passes_list)
+            inspector = PipelineInspector()
+            explanations = inspector.explain(seq)
+
+            table = Table(title="LLVM Pass Pipeline Explanation & Optimization Domains", border_style="cyan")
+            table.add_column("Pass Name", style="bold white")
+            table.add_column("Optimization Domain", style="bold cyan")
+            table.add_column("Description", style="white")
+            table.add_column("Expected Impact", style="bold green")
+
+            for exp in explanations:
+                table.add_row(exp.pass_name, exp.domain, exp.description, exp.expected_impact)
+
+            console.print(table)
+        else:
+            console.print("[yellow]Note: Report contains no custom pass sequence prescription (baseline -O3 parity or regression).[/yellow]")
+
+        if report_data:
+            rationale_lines = PipelineInspector.explain_report(report_data)
+            panel_text = "\n".join(f"[white]{line}[/white]" for line in rationale_lines)
+            console.print(Panel(panel_text, title="[bold cyan]Scientific Decision Rationale & Confirmation Summary[/bold cyan]", border_style="green"))
+        return
     else:
         passes_list = [p.strip() for p in target.replace(",", " ").split() if p.strip()]
 
