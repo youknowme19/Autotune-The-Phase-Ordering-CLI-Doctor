@@ -42,6 +42,7 @@ class CompilerDriver:
         self.clang_path = find_tool("clang", clang_path) or "clang"
         self.opt_path = find_tool("opt", opt_path)
         self.target_arch = target_arch or platform.machine()
+        self.os_name = platform.system()
         self.validator = PassValidator(opt_path=self.opt_path)
 
         self.clang_version: str = "Clang 22.1"

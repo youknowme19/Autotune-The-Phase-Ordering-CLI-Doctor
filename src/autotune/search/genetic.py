@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import os
+import platform
 import random
 import statistics
 import tempfile
@@ -195,8 +196,8 @@ class GeneticAlgorithmEngine:
             compiler_path=self.compiler.clang_path,
             compiler_version=self.compiler.clang_version or "clang",
             opt_version=self.compiler.opt_version or "opt",
-            target_arch=getattr(self.compiler, "target_arch", "arm64"),
-            os_name="Darwin",
+            target_arch=getattr(self.compiler, "target_arch", platform.machine()),
+            os_name=getattr(self.compiler, "os_name", platform.system()),
         )
 
         corr_key = self.cache_mgr.compute_correctness_key(
