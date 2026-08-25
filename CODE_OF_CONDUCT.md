@@ -34,4 +34,4 @@ This Code of Conduct applies within all project spaces, and also applies when an
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project team at `community@autotune.dev`. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the repository maintainers via [GitHub Security & Moderation Advisories](https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor/security/advisories). All complaints will be reviewed and investigated promptly and fairly.

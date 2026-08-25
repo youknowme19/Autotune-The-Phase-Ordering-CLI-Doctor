@@ -12,8 +12,8 @@ Thank you for your interest in contributing to **Autotune** — the AI-guided co
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/autotune-dev/autotune.git
-   cd autotune
+   git clone https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor.git
+   cd Autotune-The-Phase-Ordering-CLI-Doctor
    ```
 
 2. Create virtual environment and install dev dependencies:
@@ -36,5 +36,6 @@ Thank you for your interest in contributing to **Autotune** — the AI-guided co
 ## Pull Request Guidelines
 
 - Ensure unit tests pass for all pass sequence operations, GA mutations, and correctness validators.
-- Do not commit API keys or sensitive credentials.
+- **Scientific Integrity**: Do not submit benchmark claims without reproducible empirical evidence (raw samples, $p$-value, $CV\%$, and Cohen's $d$).
+- Do not commit API keys, absolute local system paths, or sensitive credentials.
 - Write descriptive commit messages.

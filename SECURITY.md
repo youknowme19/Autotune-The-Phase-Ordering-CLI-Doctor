@@ -1,7 +1,7 @@
 # Security Policy & Execution Model
 
 ## Reporting Vulnerabilities
-If you discover a security vulnerability in Autotune, please report it via email to `security@autotune.dev`.
+If you discover a security vulnerability in Autotune, please report it securely via [GitHub Security Advisories](https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor/security/advisories).
 
 ## Execution Security & Isolation Model
 

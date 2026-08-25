@@ -131,7 +131,7 @@ class EvidenceEvaluator:
 
         return EvidenceScore(
             grade=grade,
-            correctness_pass=True,
+            correctness_pass=correctness_pass,
             fresh_confirmation_used=fresh_confirmation,
             baseline_stable=b_stable,
             low_noise=low_noise,
