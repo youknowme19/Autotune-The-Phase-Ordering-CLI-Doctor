@@ -20,7 +20,7 @@ def test_environment_fingerprinting():
     assert isinstance(fp, EnvironmentFingerprint)
     assert len(fp.fingerprint_hash) == 16
     assert fp.os_name in ("Darwin", "Linux", "Windows")
-    assert fp.autotune_version == "0.2.1"
+    assert fp.autotune_version == "0.3.0"
 
 
 def test_experiment_plan_interleaved_sequence():

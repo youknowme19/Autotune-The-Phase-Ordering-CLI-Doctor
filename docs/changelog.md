@@ -4,6 +4,20 @@ All notable changes to the **Autotune** project are documented in this file.
 
 ---
 
+## [0.3.0] - 2026-08-25
+
+### 🚀 Open-Source Release, Scientific Rigor & Hardening
+- **Search vs. Confirmation Separation**: Explicitly decoupled exploratory `Search Best` from authoritative `Confirmed Speedup` across CLI, JSON, HTML, Prescription, KnowledgeStore, and CI Gate layers.
+- **Evidence Grading Decision Gate**: Enforced deterministic decision tree for Evidence Grades A, B, C, D, and F with comprehensive half-open boundary test coverage.
+- **Empirical Raw Timing Statistics**: Computed all $p$-values (Welch's $t$-test), $CV\%$, and Cohen's $d$ effect sizes from raw nanosecond timing sample arrays with zero production fallback defaults.
+- **KnowledgeStore Memory Filtering**: SQLite knowledge storage strictly persists Grade A and Grade B confirmed optimizations while rejecting unconfirmed Grade C, D, and F candidates.
+- **CI Performance Gate**: `autotune gate` evaluates BOTH required speedup threshold AND evidence grade quality (`Grade A` or `Grade B`).
+- **Subprocess Security Isolation**: Shell-safe process execution (`shell=False`) with explicit argument arrays, POSIX signal timeouts (`SIGTERM`/`SIGKILL`), and 10MB stream truncation limits.
+- **HTML XSS Sanitization**: HTML entity escaping enforced across `HTMLReportGenerator` for source paths, pass names, and user-controlled strings.
+- **Path Link Hygiene**: Sanitized documentation tree by converting absolute local machine file links to repository-relative Markdown links.
+
+---
+
 ## [0.2.1] - 2026-08-19
 
 ### 🛠️ Runtime Diagnostics, UX, & UI Fixes

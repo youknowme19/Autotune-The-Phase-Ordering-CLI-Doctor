@@ -1,6 +1,6 @@
 # Scientific Benchmark Evidence & Empirical Manifest
 
-Autotune v0.2.1 evaluates custom LLVM pass sequences against the standard Clang `-O3` compiler pipeline. Every candidate evaluated undergoes strict **sandbox output correctness verification** (stdout checksumming and exit code validation) and **baseline gating** to prune performance regressions.
+Autotune v0.3.0 evaluates custom LLVM pass sequences against the standard Clang `-O3` compiler pipeline. Every candidate evaluated undergoes strict **sandbox output correctness verification** (stdout checksumming and exit code validation) and **baseline gating** to prune performance regressions.
 
 ---
 

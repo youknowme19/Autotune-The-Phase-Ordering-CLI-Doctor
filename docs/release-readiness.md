@@ -7,7 +7,7 @@ This document records the official release readiness audit and automated validat
 ## 📦 Package Metadata
 
 - **Package Name**: `autotune-doctor`
-- **Current Version**: `0.2.1`
+- **Current Version**: `0.3.0`
 - **Build Backend**: `flit_core.buildapi`
 - **CLI Entrypoint**: `autotune = "autotune.cli:app"`
 - **License**: Apache-2.0
