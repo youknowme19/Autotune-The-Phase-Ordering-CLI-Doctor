@@ -59,12 +59,12 @@ def test_seed_archive_manager():
             source_workload_id="kernel.c",
             compiler_id="clang",
             llvm_version="22.1",
-            architecture="arm64",
-            target_info="macOS arm64",
+            architecture=platform.machine(),
+            target_info=f"{platform.system()} {platform.machine()}",
             observed_normalized_speed=1.25,
         )
 
-        valid_seeds = seed_mgr.load_valid_seeds(target_architecture="arm64", compiler_id="clang")
+        valid_seeds = seed_mgr.load_valid_seeds(target_architecture=platform.machine(), compiler_id="clang")
         assert len(valid_seeds) == 1
         assert valid_seeds[0] == ["mem2reg", "instcombine"]
 
