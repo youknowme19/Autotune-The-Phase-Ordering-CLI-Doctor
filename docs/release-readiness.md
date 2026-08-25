@@ -19,7 +19,7 @@ This document records the official release readiness audit and automated validat
 
 | Audit Dimension | Status | Verification Method |
 | :--- | :--- | :--- |
-| **Unit Test Suite** | `AUTOMATEDLY VERIFIED` | 119/119 unit tests passing cleanly (`.venv/bin/pytest -v`). |
+| **Unit Test Suite** | `AUTOMATEDLY VERIFIED` | 125/125 unit tests passing cleanly (`.venv/bin/pytest -v`). |
 | **Scientific Integrity** | `AUTOMATEDLY VERIFIED` | `Search Best` (exploratory) strictly separated from `Confirmed Speedup` (authoritative evidence). |
 | **Evidence Evaluator** | `AUTOMATEDLY VERIFIED` | Deterministic decision tree enforced (`Grade A/B/C/D/F`). Boundary tests passing. |
 | **Anti-Fabrication** | `AUTOMATEDLY VERIFIED` | All $p$-values, $CV\%$, and Cohen's $d$ metrics derived from raw timing samples. Zero hardcoded defaults. |
