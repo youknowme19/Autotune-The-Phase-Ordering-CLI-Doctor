@@ -1,11 +1,14 @@
 """
-CompareService: Side-by-side search report comparison service.
+CompareService: Side-by-side search report and live heuristic vs LLM comparison service.
 """
 
 import json
 import os
-from typing import Any, Dict
+import time
+from typing import Any, Dict, Optional
 from pydantic import BaseModel
+
+from autotune.services.doctor import DoctorService, DoctorResult
 
 
 class ComparisonResult(BaseModel):
@@ -31,8 +34,24 @@ class ComparisonResult(BaseModel):
     summary: str
 
 
+class LiveComparisonResult(BaseModel):
+    source_path: str
+    heuristic_speedup: float
+    llm_speedup: float
+    speedup_delta: float
+    heuristic_grade: str
+    llm_grade: str
+    heuristic_passes_count: int
+    llm_passes_count: int
+    heuristic_search_time_s: float
+    llm_search_time_s: float
+    heuristic_correctness: str
+    llm_correctness: str
+    summary: str
+
+
 class CompareService:
-    """Compares two optimization search reports side-by-side."""
+    """Compares two optimization search reports or runs live A/B comparison."""
 
     @staticmethod
     def compare_reports(report_a_path: str, report_b_path: str) -> ComparisonResult:
@@ -88,3 +107,61 @@ class CompareService:
             summary=summary,
         )
 
+    @staticmethod
+    def compare_live(
+        source: str,
+        preset: str = "quick",
+        seed: int = 42,
+        workload: Optional[str] = None,
+        provider: str = "openai",
+    ) -> LiveComparisonResult:
+        """Run controlled comparison between Heuristic (offline) and LLM-guided seeding."""
+        if not os.path.exists(source):
+            raise FileNotFoundError(f"Source file '{source}' not found.")
+
+        t0 = time.perf_counter()
+        res_heur = DoctorService.run(
+            source=source,
+            preset=preset,
+            seed=seed,
+            workload=workload,
+            llm=False,
+            quiet=True,
+        )
+        t_heur = round(time.perf_counter() - t0, 2)
+
+        t1 = time.perf_counter()
+        res_llm = DoctorService.run(
+            source=source,
+            preset=preset,
+            seed=seed,
+            workload=workload,
+            llm=True,
+            provider=provider,
+            quiet=True,
+        )
+        t_llm = round(time.perf_counter() - t1, 2)
+
+        diff = round(res_llm.confirmed_speedup - res_heur.confirmed_speedup, 2)
+        if diff > 0:
+            summary = f"LLM-guided seeding achieved +{diff}x higher confirmed speedup than offline heuristic seeding."
+        elif diff < 0:
+            summary = f"Offline heuristic seeding outperformed LLM-guided seeding by +{abs(diff)}x higher speedup."
+        else:
+            summary = f"Both heuristic and LLM-guided seeding achieved identical speedup parity ({res_heur.confirmed_speedup:.2f}x)."
+
+        return LiveComparisonResult(
+            source_path=source,
+            heuristic_speedup=res_heur.confirmed_speedup,
+            llm_speedup=res_llm.confirmed_speedup,
+            speedup_delta=diff,
+            heuristic_grade=res_heur.evidence_grade,
+            llm_grade=res_llm.evidence_grade,
+            heuristic_passes_count=len(res_heur.winning_passes),
+            llm_passes_count=len(res_llm.winning_passes),
+            heuristic_search_time_s=t_heur,
+            llm_search_time_s=t_llm,
+            heuristic_correctness=res_heur.correctness_status,
+            llm_correctness=res_llm.correctness_status,
+            summary=summary,
+        )

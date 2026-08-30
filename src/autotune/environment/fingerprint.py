@@ -26,12 +26,13 @@ class EnvironmentFingerprint(BaseModel):
     clang_path: str
     clang_version: str
     opt_version: str
+    target_triple: str = "unknown"
     python_version: str
     autotune_version: str = AUTOTUNE_VERSION
     fingerprint_hash: str = ""
 
     def compute_hash(self) -> str:
-        data = f"{self.os_name}:{self.architecture}:{self.cpu_info}:{self.clang_version}:{self.autotune_version}"
+        data = f"{self.os_name}:{self.architecture}:{self.cpu_info}:{self.clang_version}:{self.target_triple}:{self.autotune_version}"
         return hashlib.sha256(data.encode("utf-8")).hexdigest()[:16]
 
 
@@ -58,6 +59,8 @@ class EnvironmentFingerprinter:
         if "\n" in c_ver:
             c_ver = c_ver.splitlines()[0]
 
+        target_triple = get_command_output([c_path, "-dumpmachine"]) or f"{arch}-{os_name.lower()}"
+
         o_path = find_tool("opt") or "opt"
         o_ver = get_command_output([o_path, "--version"]) or "Opt Unknown"
         if "\n" in o_ver:
@@ -75,6 +78,7 @@ class EnvironmentFingerprinter:
             clang_path=c_path,
             clang_version=c_ver,
             opt_version=o_ver,
+            target_triple=target_triple,
             python_version=py_ver,
             autotune_version=AUTOTUNE_VERSION,
         )

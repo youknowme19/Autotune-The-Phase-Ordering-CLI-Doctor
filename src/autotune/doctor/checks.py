@@ -29,6 +29,8 @@ class DoctorReport(BaseModel):
     opt_version: Optional[str] = None
     opt_ok: bool = False
 
+    clangxx_path: Optional[str] = None
+    target_triple: Optional[str] = None
     llvm_version: Optional[str] = None
 
     measurement_backend: str
@@ -38,6 +40,23 @@ class DoctorReport(BaseModel):
     @property
     def is_healthy(self) -> bool:
         return self.python_ok and self.clang_ok
+
+
+def check_system_environment_warnings() -> List[str]:
+    """Detect potential benchmark measurement noise sources (CPU load, thermal, etc.)."""
+    env_warnings: List[str] = []
+    try:
+        if hasattr(os, "getloadavg"):
+            load1, _, _ = os.getloadavg()
+            cpu_cnt = os.cpu_count() or 1
+            if load1 > (cpu_cnt * 1.5):
+                env_warnings.append(
+                    f"High background CPU load detected (1-min load average: {load1:.2f} across {cpu_cnt} cores). "
+                    "Benchmark measurements may exhibit elevated noise (CV)."
+                )
+    except Exception:
+        pass
+    return env_warnings
 
 
 def find_tool(
@@ -113,6 +132,8 @@ def run_doctor_checks(
     clang_path = find_tool("clang", custom_clang)
     clang_version = None
     clang_ok = False
+    target_triple = None
+
     if clang_path:
         out = get_command_output([clang_path, "--version"])
         if out:
@@ -120,8 +141,19 @@ def run_doctor_checks(
             clang_ok = True
         else:
             errors.append(f"Clang binary at {clang_path} failed execution check.")
+        
+        target_triple = get_command_output([clang_path, "-dumpmachine"])
     else:
         errors.append("Clang executable not found in PATH or standard LLVM installation paths.")
+
+    # Find clang++
+    clangxx_path = None
+    if clang_path:
+        same_dir_clangxx = os.path.join(os.path.dirname(clang_path), "clang++")
+        if os.path.exists(same_dir_clangxx) and os.access(same_dir_clangxx, os.X_OK):
+            clangxx_path = same_dir_clangxx
+        else:
+            clangxx_path = find_tool("clang++")
 
     opt_version = None
     opt_ok = False
@@ -156,6 +188,10 @@ def run_doctor_checks(
     else:
         measurement_backend = f"{os_name} standard timing backend"
 
+    # Environment noise checks
+    env_warns = check_system_environment_warnings()
+    warnings.extend(env_warns)
+
     return DoctorReport(
         python_version=py_ver,
         python_ok=py_ok,
@@ -163,6 +199,8 @@ def run_doctor_checks(
         arch=arch,
         cpu_info=cpu_info,
         clang_path=clang_path,
+        clangxx_path=clangxx_path,
+        target_triple=target_triple or f"{arch}-{os_name.lower()}",
         clang_version=clang_version,
         clang_ok=clang_ok,
         opt_path=opt_path,

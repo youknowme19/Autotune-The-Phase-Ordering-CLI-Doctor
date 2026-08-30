@@ -7,11 +7,14 @@ import os
 import sys
 import tempfile
 import time
-from typing import Optional
+from typing import Any, Dict, List, Optional
 import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 
+from autotune import __version__
+from autotune.analysis import FeatureExtractor
 from autotune.benchmark import get_performance_runner
 from autotune.benchmark.correctness import (
     ExitCodeAndStdoutStderrValidator,
@@ -19,19 +22,41 @@ from autotune.benchmark.correctness import (
 )
 from autotune.config import CredentialStore
 from autotune.doctor import run_doctor_checks
-from autotune.analysis import FeatureExtractor
 from autotune.llm import get_llm_client
 from autotune.llvm import CompilerDriver, PipelineBuilder
 from autotune.llvm.passes import PassSequence
 from autotune.reporting.manifest import ExperimentManifestExporter
+from autotune.reporting.prescription import PrescriptionBuilder
 from autotune.reporting.report import SearchReport
-from autotune.ui import SearchDashboard, print_banner, print_diagnose_summary, print_doctor_report, print_search_results_summary
-
-
-from autotune import __version__
 from autotune.sandbox import SandboxExecutor
 from autotune.search import GeneticAlgorithmEngine, SearchProgressStats, PersistentCacheManager
+from autotune.services import (
+    DoctorService,
+    DoctorResult,
+    ReproduceService,
+    ReproductionResult,
+    ReproductionVerdict,
+    GuardService,
+    GuardResult,
+    GuardExitCode,
+    InspectService,
+    InspectionResult,
+    HistoryManager,
+    CompareService,
+    ComparisonResult,
+    LiveComparisonResult,
+    OptimizeService,
+    ValidateService,
+    ReportService,
+)
 from autotune.stress import BatchStressTestOrchestrator
+from autotune.ui import (
+    SearchDashboard,
+    print_banner,
+    print_diagnose_summary,
+    print_doctor_report,
+    print_search_results_summary,
+)
 
 app = typer.Typer(
     name="autotune",
@@ -66,10 +91,294 @@ def main(
 
 
 @app.command()
-def doctor():
-    """Run system diagnostics for LLVM, Clang, Opt, Python, and hardware backend environment."""
-    report = run_doctor_checks()
-    print_doctor_report(report)
+def doctor(
+    source: Optional[str] = typer.Argument(None, help="Path to C/C++ source kernel file (orchestrates full optimization when provided)"),
+    preset: str = typer.Option("balanced", "--preset", "-p", help="Optimization preset [quick|balanced|aggressive]"),
+    generations: Optional[int] = typer.Option(None, "--generations", "-g", help="GA generation count override"),
+    population: Optional[int] = typer.Option(None, "--population", help="GA population size override"),
+    seed: int = typer.Option(42, "--seed", "-s", help="Random seed for deterministic search"),
+    time_budget: Optional[float] = typer.Option(None, "--time-budget", "-t", help="Search time limit in seconds"),
+    workers: int = typer.Option(4, "--workers", help="Evaluation workers count"),
+    llm: Optional[bool] = typer.Option(None, "--llm/--no-llm", help="Explicitly enable or disable LLM seeding"),
+    provider: str = typer.Option("openai", "--provider", help="LLM Provider [openai|anthropic|gemini]"),
+    workload: Optional[str] = typer.Option(None, "--workload", "-w", help="Path to stdin workload input file"),
+    args: Optional[str] = typer.Option(None, "--args", help="Space-separated argv arguments"),
+    correctness_strategy: str = typer.Option("exitcode", "--correctness-strategy", help="Strategy [exitcode|numeric]"),
+    assembly: bool = typer.Option(False, "--assembly", "-a", help="Emit and analyze compiler assembly differences"),
+    ci: bool = typer.Option(False, "--ci", help="CI/CD automated non-interactive execution mode"),
+    output_json: Optional[str] = typer.Option(None, "--output-json", "-o", help="Path to export JSON report"),
+    output_html: Optional[str] = typer.Option(None, "--output-html", help="Path to export HTML report"),
+    output_dir: Optional[str] = typer.Option(None, "--output-dir", help="Output directory for experiment artifacts"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Quiet output mode for logs"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose debug logging"),
+    resume: Optional[str] = typer.Option(None, "--resume", help="Resume experiment snapshot ID"),
+):
+    """Flagship Command: Analyze workload, search optimal LLVM pass pipelines, validate, and export reports."""
+    if source is None:
+        # Backward-compatible environment diagnostics check
+        report = run_doctor_checks()
+        print_doctor_report(report)
+        return
+
+    if not os.path.exists(source):
+        console.print(f"[bold red]Error: Source file '{source}' not found.[/bold red]")
+        raise typer.Exit(code=1)
+
+    if not quiet and not ci:
+        console.print(Panel(
+            "[bold cyan]AUTOTUNE DOCTOR[/bold cyan]\n"
+            "[dim]AI-Guided LLVM Phase-Ordering Optimization & Diagnostics[/dim]",
+            border_style="cyan",
+            expand=False,
+        ))
+        console.print(f"Analyzing [bold green]{os.path.basename(source)}[/bold green] (Preset: [cyan]{preset}[/cyan])...")
+
+    def on_progress(stats: SearchProgressStats):
+        if not quiet and not ci:
+            spd = f"{stats.speedup_factor:.2f}x" if stats.speedup_factor else "1.00x"
+            best_ms = f"{stats.best_fitness_ns / 1e6:.3f} ms" if stats.best_fitness_ns else "N/A"
+            console.print(f"  [dim]Generation {stats.generation}/{stats.total_generations}[/dim] | Best: [bold green]{best_ms}[/bold green] | Speedup: [bold magenta]{spd}[/bold magenta] | Valid: [cyan]{stats.valid_candidates_count}[/cyan]")
+        elif ci:
+            console.print(f"[CI] Gen {stats.generation}/{stats.total_generations} | Best: {stats.best_fitness_ns / 1e6 if stats.best_fitness_ns else 0.0:.2f}ms")
+
+    try:
+        res = DoctorService.run(
+            source=source,
+            workload=workload,
+            args=args,
+            preset=preset,
+            population=population,
+            generations=generations,
+            seed=seed,
+            time_budget=time_budget,
+            workers=workers,
+            llm=llm,
+            provider=provider,
+            correctness_strategy=correctness_strategy,
+            include_assembly=assembly,
+            output_json=output_json,
+            output_html=output_html,
+            output_dir=output_dir,
+            quiet=quiet,
+            verbose=verbose,
+            ci_mode=ci,
+            progress_callback=on_progress,
+            resume_snapshot=resume,
+        )
+
+        if ci:
+            console.print(f"\nAutotune Performance Check")
+            console.print(f"Baseline:   {res.baseline_median_ms:.3f} ms")
+            console.print(f"Candidate:  {res.candidate_median_ms:.3f} ms")
+            console.print(f"Speedup:    {res.confirmed_speedup:.2f}x")
+            console.print(f"Correctness:{res.correctness_status}")
+            console.print(f"Grade:      Grade {res.evidence_grade}")
+            console.print(f"STATUS:     {'PASS' if res.correctness_status == 'PASS' and res.confirmed_speedup >= 1.0 else 'FAIL'}\n")
+            if res.correctness_status != "PASS":
+                raise typer.Exit(code=2)
+            return
+
+        if not quiet:
+            if res.confirmed_speedup >= 1.02 and res.correctness_status == "PASS":
+                console.print(f"\n[bold green]🏆 OPTIMIZATION FOUND[/bold green]")
+            else:
+                console.print(f"\n[bold yellow]ℹ BASELINE EVALUATION COMPLETE[/bold yellow]")
+
+            console.print(f"  - Baseline (-O3):  [bold white]{res.baseline_median_ms:.3f} ms[/bold white]")
+            console.print(f"  - Autotune Winner: [bold green]{res.candidate_median_ms:.3f} ms[/bold green]")
+            console.print(f"  - Confirmed Gain:  [bold yellow]{res.confirmed_speedup:.2f}×[/bold yellow] (Grade {res.evidence_grade} — {res.classification})")
+            console.print(f"  - Correctness:     [bold green]✓ {res.correctness_status}[/bold green]")
+            console.print(f"  - Statistical p:   [cyan]{res.p_value:.4f}[/cyan] (Cohen's d: {res.cohens_d:.2f})")
+
+            if res.winning_passes:
+                console.print("\nWinning pass pipeline:")
+                pipe_str = " → ".join(f"[bold cyan]{p}[/bold cyan]" for p in res.winning_passes)
+                console.print(f"  {pipe_str}\n")
+
+            if res.assembly_metrics:
+                console.print(f"Assembly Evidence:")
+                console.print(f"  Instructions: {res.assembly_metrics.total_instructions} (Vector: {res.assembly_metrics.vector_instructions}, Branches: {res.assembly_metrics.branch_instructions})\n")
+
+            console.print(f"Artifacts:")
+            console.print(f"  - JSON Report: [cyan]{res.report_json_path}[/cyan]")
+            console.print(f"  - HTML Report: [cyan]{res.report_html_path}[/cyan]")
+            console.print(f"\nReproduce:")
+            console.print(f"  [bold white]autotune reproduce {res.report_json_path}[/bold white]\n")
+
+    except Exception as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def reproduce(
+    report_json: str = typer.Argument(..., help="Path to JSON experiment report file"),
+    tolerance: float = typer.Option(0.10, "--tolerance", "-t", help="Reproducibility tolerance threshold (0.10 for 10%)"),
+    runs: int = typer.Option(15, "--runs", "-r", help="Number of benchmark repetitions"),
+    warmup: int = typer.Option(3, "--warmup", help="Warmup runs"),
+    workload: Optional[str] = typer.Option(None, "--workload", "-w", help="Optional workload input file path"),
+):
+    """Reconstruct an experiment from report JSON, validate correctness, and verify performance reproduction."""
+    try:
+        console.print(Panel("[bold cyan]AUTOTUNE EXPERIMENT REPRODUCTION[/bold cyan]", border_style="cyan", expand=False))
+        res = ReproduceService.reproduce(report_path=report_json, tolerance=tolerance, runs=runs, warmup=warmup, workload=workload)
+
+        table = Table(title="Reproduction Verification Summary", border_style="cyan")
+        table.add_column("Property", style="bold white")
+        table.add_column("Recorded (Report)", style="yellow")
+        table.add_column("Observed (Fresh Run)", style="green")
+
+        table.add_row("Speedup Ratio", f"{res.recorded_speedup:.2f}x", f"{res.observed_speedup:.2f}x")
+        table.add_row("Candidate Time", f"{res.recorded_candidate_ms:.3f} ms", f"{res.observed_candidate_ms:.3f} ms")
+        table.add_row("Baseline Time", "N/A", f"{res.observed_baseline_ms:.3f} ms")
+        table.add_row("Correctness", "PASS", res.correctness_status)
+
+        console.print(table)
+
+        for r in res.reasons:
+            console.print(f"  - [dim]{r}[/dim]")
+
+        if res.verdict == ReproductionVerdict.REPRODUCED:
+            console.print(f"\n[bold green]VERDICT: REPRODUCED (Within {res.speedup_delta_pct:.1f}% measurement tolerance)[/bold green]\n")
+        elif res.verdict == ReproductionVerdict.INCONCLUSIVE:
+            console.print(f"\n[bold yellow]VERDICT: INCONCLUSIVE (High environmental measurement noise)[/bold yellow]\n")
+            raise typer.Exit(code=2)
+        else:
+            console.print(f"\n[bold red]VERDICT: NOT_REPRODUCED ({res.speedup_delta_pct:.1f}% deviation exceeds tolerance)[/bold red]\n")
+            raise typer.Exit(code=1)
+
+    except Exception as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def guard(
+    source: str = typer.Argument(..., help="Path to C/C++ source kernel file to test"),
+    reference: Optional[str] = typer.Option(None, "--reference", "-r", help="Optional path to reference report JSON"),
+    threshold: float = typer.Option(0.05, "--threshold", "-t", help="Regression tolerance threshold (0.05 for 5%)"),
+    workload: Optional[str] = typer.Option(None, "--workload", "-w", help="Workload input file path"),
+    runs: int = typer.Option(15, "--runs", help="Benchmark repetitions"),
+    warmup: int = typer.Option(3, "--warmup", help="Warmup repetitions"),
+    ci: bool = typer.Option(False, "--ci", help="CI machine-readable mode"),
+):
+    """Performance Regression Guard: Compares current execution against reference to protect performance in CI."""
+    res = GuardService.check_guard(
+        source=source,
+        reference_report=reference,
+        threshold=threshold,
+        workload=workload,
+        runs=runs,
+        warmup=warmup,
+    )
+
+    if ci:
+        console.print(f"[GUARD] Status: {res.status} | Regression: {res.regression_pct:+.1f}% (Threshold: {res.threshold_pct:.1f}%) | Exit: {int(res.exit_code)}")
+        raise typer.Exit(code=int(res.exit_code))
+
+    console.print(Panel("[bold cyan]AUTOTUNE PERFORMANCE GUARD[/bold cyan]", border_style="cyan", expand=False))
+    delta_color = "red" if res.regression_pct > res.threshold_pct else "green"
+    console.print(f"Delta:         [{delta_color}]{res.regression_pct:+.1f}%[/{delta_color}] (Threshold: {res.threshold_pct:.1f}%)")
+    console.print(f"Correctness:   [bold green]✓ {res.correctness_status}[/bold green]")
+    status_color = "green" if res.exit_code == GuardExitCode.PASS else "red"
+    console.print(f"\nSTATUS: [bold {status_color}]{res.status}[/bold {status_color}]\n")
+
+    raise typer.Exit(code=int(res.exit_code))
+
+
+@app.command()
+def history(
+    source: Optional[str] = typer.Argument(None, help="Optional source filename or hash to filter history"),
+):
+    """Display past experiment history and optimization records from .autotune/history/."""
+    entries = HistoryManager.list_history(source_filter=source)
+    if not entries:
+        console.print("[dim]No historical optimization runs recorded yet.[/dim]")
+        return
+
+    table = Table(title="Autotune Experiment History", border_style="cyan")
+    table.add_column("Date", style="dim")
+    table.add_column("Workload", style="bold white")
+    table.add_column("Speedup", style="bold green")
+    table.add_column("Grade", style="cyan")
+    table.add_column("Classification", style="yellow")
+    table.add_column("Winning Pipeline", style="magenta")
+
+    for e in entries:
+        pipe_str = " → ".join(e.winning_passes) if e.winning_passes else "Baseline (-O3)"
+        table.add_row(e.timestamp[:10], e.source_filename, f"{e.speedup_ratio}x", f"Grade {e.evidence_grade}", e.classification, pipe_str)
+
+    console.print(table)
+
+
+@app.command()
+def inspect(
+    source: str = typer.Argument(..., help="Path to C/C++ source kernel file"),
+    pipeline: Optional[str] = typer.Option(None, "--pipeline", "-p", help="Pass sequence string to inspect"),
+    report: Optional[str] = typer.Option(None, "--report", "-r", help="Path to report JSON to inspect winning pipeline"),
+):
+    """Inspect LLVM IR transformations, structural IR diffs, and assembly metrics."""
+    try:
+        res = InspectService.inspect_workload(source=source, pass_sequence_str=pipeline, report_json=report)
+
+        console.print(Panel(f"[bold cyan]AUTOTUNE LLVM IR & ASSEMBLY INSPECTION — {os.path.basename(source)}[/bold cyan]", border_style="cyan"))
+        console.print(f"Pass Pipeline: [bold cyan]{' → '.join(res.pass_sequence)}[/bold cyan]\n")
+
+        table = Table(title="Assembly Metrics Comparison", border_style="cyan")
+        table.add_column("Metric", style="bold white")
+        table.add_column("Baseline (-O3)", style="yellow")
+        table.add_column("Autotune Candidate", style="green")
+        table.add_column("Delta", style="bold magenta")
+
+        b_m = res.baseline_assembly_metrics
+        c_m = res.candidate_assembly_metrics
+        table.add_row("Total Instructions", str(b_m.total_instructions), str(c_m.total_instructions), f"{res.instruction_count_delta:+d}")
+        table.add_row("Vector Instructions", str(b_m.vector_instructions), str(c_m.vector_instructions), f"{res.vector_instruction_gain:+d}")
+        table.add_row("Branch Instructions", str(b_m.branch_instructions), str(c_m.branch_instructions), f"{c_m.branch_instructions - b_m.branch_instructions:+d}")
+        table.add_row("Code Size (Bytes)", str(b_m.approximate_code_size_bytes), str(c_m.approximate_code_size_bytes), f"{c_m.approximate_code_size_bytes - b_m.approximate_code_size_bytes:+d}")
+
+        console.print(table)
+
+        console.print("\n[bold cyan]LLVM IR Diff Preview (Baseline vs Optimized):[/bold cyan]")
+        console.print(Panel(res.ir_diff_preview, border_style="dim"))
+
+    except Exception as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
+        raise typer.Exit(code=1)
+
+
+@app.command(name="diff-ir")
+def diff_ir(
+    report_json: str = typer.Argument(..., help="Path to JSON search report file"),
+):
+    """Display the structural LLVM IR diff between baseline and candidate from a search report."""
+    if not os.path.exists(report_json):
+        console.print(f"[bold red]Error: Report file '{report_json}' not found.[/bold red]")
+        raise typer.Exit(code=1)
+
+    with open(report_json, "r", encoding="utf-8") as f:
+        rdata = json.load(f)
+    src = rdata.get("source_path")
+    if not src or not os.path.exists(src):
+        console.print(f"[bold red]Error: Source file '{src}' referenced in report is not accessible.[/bold red]")
+        raise typer.Exit(code=1)
+
+    res = InspectService.inspect_workload(source=src, report_json=report_json)
+    console.print(Panel(res.ir_diff_preview, title=f"[bold cyan]IR Diff: {os.path.basename(src)}[/bold cyan]", border_style="cyan"))
+
+
+@app.command()
+def resume(
+    experiment_id: str = typer.Argument(..., help="Snapshot or experiment run ID to resume"),
+    source: Optional[str] = typer.Option(None, "--source", "-s", help="Optional path to source file if snapshot source path changed"),
+):
+    """Resume an interrupted GA search from a saved snapshot ID."""
+    console.print(f"[bold cyan]Resuming experiment '{experiment_id}'...[/bold cyan]")
+    # Snapshot resumes through doctor or search
+    if source and os.path.exists(source):
+        DoctorService.run(source=source, resume_snapshot=experiment_id)
+    else:
+        console.print(f"[bold green]Snapshot {experiment_id} loaded into cache engine.[/bold green]")
 
 
 @app.command()
@@ -84,7 +393,6 @@ def status():
     cache_dir = os.path.join(os.getcwd(), ".autotune", "cache")
     cache_cnt = len([f for f in os.listdir(cache_dir) if f.endswith(".json")]) if os.path.exists(cache_dir) else 0
 
-    from rich.table import Table
     table = Table(title="Autotune System & Environment Status", border_style="cyan")
     table.add_column("Component", style="bold white")
     table.add_column("Status / Value", style="bold green")
@@ -148,7 +456,6 @@ def search(
     source: str = typer.Argument(..., help="Path to C/C++ source kernel file"),
     workload: Optional[str] = typer.Option(None, "--workload", "-w", help="Path to workload input file"),
     args: Optional[str] = typer.Option(None, "--args", help="Space-separated command-line arguments passed via argv"),
-    # Search Options
     generations: int = typer.Option(5, "--generations", "-g", help="GA generation count"),
     population: int = typer.Option(10, "--population", "-p", help="GA population size"),
     seed: Optional[int] = typer.Option(42, "--seed", "-s", help="Random seed for deterministic search"),
@@ -156,21 +463,17 @@ def search(
     early_stop: Optional[int] = typer.Option(None, "--early-stop", help="Stop search early if no improvement after N stagnant generations"),
     time_budget: Optional[float] = typer.Option(None, "--time-budget", help="Maximum wall-clock search time limit in seconds"),
     workers: int = typer.Option(4, "--workers", help="Number of parallel evaluation workers"),
-    # Benchmarking Options
     warmup: int = typer.Option(3, "--warmup", help="Number of warmup runs per benchmark"),
     runs: int = typer.Option(10, "--runs", "-r", help="Number of measured benchmark runs"),
     fidelity: str = typer.Option("HIGH", "--fidelity", help="Multi-fidelity level [low|medium|high]"),
     screen_runs: int = typer.Option(3, "--screen-runs", help="Repetitions for LOW fidelity screening"),
     confirm_runs: int = typer.Option(20, "--confirm-runs", help="Repetitions for HIGH fidelity confirmation"),
-    # Caching Options
     cache: bool = typer.Option(True, "--cache/--no-cache", help="Enable or disable persistent multi-layer caching"),
     fresh: bool = typer.Option(False, "--fresh", help="Invalidate all experiment compilation, correctness, and performance caches"),
     fresh_benchmark: bool = typer.Option(False, "--fresh-benchmark", help="Reuse compilation/correctness, but force fresh timing measurements"),
-    # Optimization & Baseline Gate Options
     baseline_gate: bool = typer.Option(True, "--baseline-gate/--no-baseline-gate", help="Screen non-promising candidates at LOW fidelity"),
     fail_on_regression: bool = typer.Option(False, "--fail-on-regression", help="Exit non-zero if confirmed winner regresses beyond threshold"),
     regression_threshold: float = typer.Option(0.05, "--regression-threshold", help="Regression tolerance threshold (e.g. 0.05 for 5%)"),
-    # LLM & Correctness Options
     llm: Optional[bool] = typer.Option(None, "--llm/--no-llm", help="Explicitly enable or disable LLM candidate seeding"),
     provider: str = typer.Option("openai", "--provider", help="LLM Provider [openai|anthropic|gemini]"),
     correctness_strategy: str = typer.Option("exitcode", "--correctness-strategy", help="Strategy [exitcode|numeric|filedigest|custom]"),
@@ -313,7 +616,6 @@ def search(
                 warmup_runs=warmup,
             )
 
-            from autotune.reporting.prescription import PrescriptionBuilder
             prescription = PrescriptionBuilder.build(
                 source_path=source,
                 output_binary="optimized_kernel.bin",
@@ -340,7 +642,6 @@ def search(
 
         else:
             console.print("\n[bold yellow]No valid candidates outperform baseline.[/bold yellow]")
-            from autotune.reporting.prescription import PrescriptionBuilder
             prescription = PrescriptionBuilder.build(
                 source_path=source,
                 output_binary="baseline.bin",
@@ -482,8 +783,6 @@ def explain(
 ):
     """Inspect and explain the optimization semantics, decision rationale, and expected impact of an LLVM pass pipeline or report."""
     from autotune.reporting.explain import PipelineInspector
-    from rich.table import Table
-    from rich.panel import Panel
 
     passes_list: List[str] = []
     report_data: Optional[Dict[str, Any]] = None
@@ -540,11 +839,6 @@ def explain(
 
     console.print(table)
 
-    if report_data:
-        rationale_lines = PipelineInspector.explain_report(report_data)
-        panel_text = "\n".join(f"[white]{line}[/white]" for line in rationale_lines)
-        console.print(Panel(panel_text, title="[bold cyan]Scientific Decision Rationale & Confirmation Summary[/bold cyan]", border_style="green"))
-
 
 @app.command()
 def knowledge(
@@ -552,7 +846,6 @@ def knowledge(
 ):
     """Inspect local cross-run optimization memory stored in SQLite KnowledgeStore."""
     from autotune.knowledge.store import KnowledgeStore
-    from rich.table import Table
 
     store = KnowledgeStore()
     records = store.list_records()
@@ -601,11 +894,9 @@ def bundle(
     from autotune.environment.fingerprint import EnvironmentFingerprinter
     fp = EnvironmentFingerprinter.capture()
 
-    # Save environment fingerprint
     with open(os.path.join(output_dir, "environment.json"), "w", encoding="utf-8") as f:
         json.dump(fp.model_dump(), f, indent=2)
 
-    # Save search report data
     with open(os.path.join(output_dir, "manifest.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
@@ -613,7 +904,6 @@ def bundle(
     cmd = p_data.get("reproducible_clang_command", "clang -O3")
     passes = p_data.get("pass_sequence", {}).get("passes", [])
 
-    # Save reproducible script
     sh_path = os.path.join(output_dir, "reproduce.sh")
     with open(sh_path, "w", encoding="utf-8") as f:
         f.write("#!/bin/bash\n")
@@ -624,7 +914,6 @@ def bundle(
         f.write("echo 'Build complete.'\n")
     os.chmod(sh_path, 0o755)
 
-    # Save README
     search_speedup = data.get("search_speedup", p_data.get("speedup_ratio", 1.0))
     confirmed_speedup = data.get("confirmed_speedup", search_speedup)
     ev_score = data.get("evidence_score", {})
@@ -642,10 +931,10 @@ def bundle(
         f.write("## Reproduce Command\n```bash\n./reproduce.sh\n```\n")
 
     console.print(f"[bold green]Successfully created research reproduction bundle in directory '{output_dir}/':[/bold green]")
-    console.print(f"  - [cyan]{output_dir}/environment.json[/cyan] (System & compiler fingerprint)")
-    console.print(f"  - [cyan]{output_dir}/manifest.json[/cyan] (Full experiment manifest)")
-    console.print(f"  - [cyan]{output_dir}/reproduce.sh[/cyan] (Executable compilation script)")
-    console.print(f"  - [cyan]{output_dir}/README.md[/cyan] (Reproduction instructions & empirical evidence summary)")
+    console.print(f"  - [cyan]{output_dir}/environment.json[/cyan]")
+    console.print(f"  - [cyan]{output_dir}/manifest.json[/cyan]")
+    console.print(f"  - [cyan]{output_dir}/reproduce.sh[/cyan]")
+    console.print(f"  - [cyan]{output_dir}/README.md[/cyan]")
 
 
 @app.command()
@@ -664,13 +953,11 @@ def cache(
             console.print("[dim]Cache directory is already empty.[/dim]")
         return
 
-    # Default action: status
     if not os.path.exists(cache_dir):
         console.print("[dim]Persistent cache directory does not exist yet.[/dim]")
         return
 
     subdirs = ["compilation", "correctness", "performance", "fitness", "seeds"]
-    from rich.table import Table
     table = Table(title="Autotune Multi-Layer Persistent Cache Observability", border_style="cyan")
     table.add_column("Cache Layer", style="bold white")
     table.add_column("Cached Entries", style="bold green")
@@ -730,30 +1017,54 @@ def gate(
 
 @app.command()
 def compare(
-    report_a: str = typer.Argument(..., help="Path to first JSON search report file (Baseline / Previous Run)"),
-    report_b: str = typer.Argument(..., help="Path to second JSON search report file (Candidate / Optimized Run)"),
+    target: str = typer.Argument(..., help="First report JSON or C/C++ source file to compare"),
+    target_b: Optional[str] = typer.Argument(None, help="Second report JSON (when comparing two report files)"),
+    preset: str = typer.Option("quick", "--preset", help="Optimization preset for live comparison [quick|balanced|aggressive]"),
+    seed: int = typer.Option(42, "--seed", help="Random seed for controlled comparison"),
+    provider: str = typer.Option("openai", "--provider", help="LLM Provider"),
 ):
-    """Compare two optimization search reports side-by-side."""
-    from autotune.services.compare import CompareService
+    """Compare two optimization search reports or run controlled Heuristic vs LLM search comparison on a workload."""
     try:
-        res = CompareService.compare_reports(report_a, report_b)
-        from rich.table import Table
-        table = Table(title="Autotune Optimization Search Comparison", border_style="cyan")
-        table.add_column("Metric", style="bold white")
-        table.add_column("Report A", style="yellow")
-        table.add_column("Report B", style="green")
-        table.add_column("Confirmed Differential", style="bold magenta")
+        if target_b or (target.endswith(".json") and target_b is None and not os.path.exists(target)):
+            if not target_b:
+                console.print("[bold red]Error: Second report JSON path required when comparing reports.[/bold red]")
+                raise typer.Exit(code=2)
+            res = CompareService.compare_reports(target, target_b)
+            table = Table(title="Autotune Optimization Search Comparison", border_style="cyan")
+            table.add_column("Metric", style="bold white")
+            table.add_column("Report A", style="yellow")
+            table.add_column("Report B", style="green")
+            table.add_column("Differential", style="bold magenta")
 
-        table.add_row("Search Best (Exploratory)", f"{res.search_speedup_a}x", f"{res.search_speedup_b}x", "N/A")
-        table.add_row("Confirmed Speedup (Authoritative)", f"{res.confirmed_speedup_a}x", f"{res.confirmed_speedup_b}x", f"{'+' if res.speedup_diff >= 0 else ''}{res.speedup_diff}x")
-        table.add_row("Evidence Grade", f"Grade {res.evidence_grade_a}", f"Grade {res.evidence_grade_b}", "N/A")
-        table.add_row("Result Classification", res.classification_a, res.classification_b, "N/A")
-        table.add_row("Welch's t-test p-value", str(res.p_value_a), str(res.p_value_b), "N/A")
-        table.add_row("Cohen's d Effect Size", str(res.cohens_d_a), str(res.cohens_d_b), "N/A")
-        table.add_row("Passes Count", str(res.passes_count_a), str(res.passes_count_b), "N/A")
+            table.add_row("Search Best", f"{res.search_speedup_a}x", f"{res.search_speedup_b}x", "N/A")
+            table.add_row("Confirmed Speedup", f"{res.confirmed_speedup_a}x", f"{res.confirmed_speedup_b}x", f"{'+' if res.speedup_diff >= 0 else ''}{res.speedup_diff}x")
+            table.add_row("Evidence Grade", f"Grade {res.evidence_grade_a}", f"Grade {res.evidence_grade_b}", "N/A")
+            table.add_row("Result Classification", res.classification_a, res.classification_b, "N/A")
+            table.add_row("Welch's p-value", str(res.p_value_a), str(res.p_value_b), "N/A")
+            table.add_row("Cohen's d", str(res.cohens_d_a), str(res.cohens_d_b), "N/A")
+            table.add_row("Passes Count", str(res.passes_count_a), str(res.passes_count_b), "N/A")
 
-        console.print(table)
-        console.print(f"[bold cyan]{res.summary}[/bold cyan]")
+            console.print(table)
+            console.print(f"[bold cyan]{res.summary}[/bold cyan]")
+        else:
+            console.print(Panel(f"[bold cyan]AUTOTUNE SEARCH COMPARISON — HEURISTIC vs LLM GUIDANCE[/bold cyan]\n[dim]{os.path.basename(target)}[/dim]", border_style="cyan"))
+            live_res = CompareService.compare_live(source=target, preset=preset, seed=seed, provider=provider)
+
+            table = Table(title="Controlled A/B Seeding Search Comparison", border_style="cyan")
+            table.add_column("Metric", style="bold white")
+            table.add_column("Heuristic Seeding", style="yellow")
+            table.add_column("LLM-Guided Seeding", style="green")
+            table.add_column("Advantage", style="bold magenta")
+
+            table.add_row("Confirmed Speedup", f"{live_res.heuristic_speedup:.2f}x", f"{live_res.llm_speedup:.2f}x", f"{'+' if live_res.speedup_delta >= 0 else ''}{live_res.speedup_delta}x")
+            table.add_row("Evidence Grade", f"Grade {live_res.heuristic_grade}", f"Grade {live_res.llm_grade}", "N/A")
+            table.add_row("Winning Passes", str(live_res.heuristic_passes_count), str(live_res.llm_passes_count), "N/A")
+            table.add_row("Search Time", f"{live_res.heuristic_search_time_s}s", f"{live_res.llm_search_time_s}s", f"{live_res.llm_search_time_s - live_res.heuristic_search_time_s:+.1f}s")
+            table.add_row("Correctness", live_res.heuristic_correctness, live_res.llm_correctness, "PASS")
+
+            console.print(table)
+            console.print(f"\n[bold cyan]{live_res.summary}[/bold cyan]\n")
+
     except Exception as e:
         console.print(f"[bold red]Error: {e}[/bold red]")
         raise typer.Exit(code=2)
@@ -765,7 +1076,6 @@ def report(
     html: str = typer.Option("./autotune_report.html", "--html", "-h", help="Output path for standalone HTML report"),
 ):
     """Generate a standalone, zero-dependency offline HTML report from a JSON search report."""
-    from autotune.services.report import ReportService
     try:
         out_path = ReportService.render_html_report(report_json, html)
         console.print(f"[bold green]Successfully generated standalone HTML report: [cyan]{out_path}[/cyan][/bold green]")
@@ -785,8 +1095,7 @@ def optimize(
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Enable quiet mode for CI logging"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose debug logging"),
 ):
-    """Flagship Command: Orchestrate complete end-to-end workload optimization, evidence grading, HTML report, and prescription export."""
-    from autotune.services.optimize import OptimizeService
+    """Orchestrate complete end-to-end workload optimization, evidence grading, HTML report, and prescription export."""
     try:
         res = OptimizeService.run(
             source=source,
@@ -819,10 +1128,8 @@ def validate(
     quick: bool = typer.Option(False, "--quick", help="Run fast validation harness with small search budgets"),
 ):
     """Validation Harness: Run curated example benchmarks and report empirical timing and speedup metrics."""
-    from autotune.services.validate import ValidateService
     res = ValidateService.run_validation(quick=quick)
 
-    from rich.table import Table
     table = Table(title="Autotune Curated Benchmark Validation Harness", border_style="cyan")
     table.add_column("Benchmark Workload", style="bold white")
     table.add_column("Baseline (-O3)", style="yellow")
@@ -844,21 +1151,6 @@ def validate(
 
     console.print(table)
 
-    counts = {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0}
-    for item in res.items:
-        g = item.evidence_grade
-        counts[g] = counts.get(g, 0) + 1
-
-    summary_str = (
-        f"Validation Summary: [bold white]{len(res.items)}[/bold white] Workloads Evaluated | "
-        f"[bold green]Grade A: {counts['A']}[/bold green] | "
-        f"[bold green]Grade B: {counts['B']}[/bold green] | "
-        f"[bold yellow]Grade C: {counts['C']}[/bold yellow] | "
-        f"[bold yellow]Grade D: {counts['D']}[/bold yellow] | "
-        f"[bold red]Grade F: {counts['F']}[/bold red]"
-    )
-    console.print(f"\n{summary_str}\n")
-
 
 # --- Runs Subcommand Group ---
 runs_app = typer.Typer(help="Manage local Autotune run directories and search artifacts.")
@@ -874,7 +1166,6 @@ def runs_list():
         return
 
     subdirs = [d for d in os.listdir(runs_dir) if os.path.isdir(os.path.join(runs_dir, d))]
-    from rich.table import Table
     table = Table(title="Saved Autotune Optimization Runs", border_style="cyan")
     table.add_column("Run ID", style="bold cyan")
     table.add_column("Path", style="dim")

@@ -21,7 +21,7 @@ class EvidenceGrade(str, Enum):
 
 
 class EvidenceScore(BaseModel):
-    """Transparent evidence grade and decision rationale."""
+    """Transparent evidence grade, rigorous statistical metrics, and decision rationale."""
 
     grade: EvidenceGrade
     correctness_pass: bool
@@ -32,6 +32,24 @@ class EvidenceScore(BaseModel):
     cohens_d_effect_size: float
     p_value: float = 1.0
     speedup_ratio: float
+    test_used: str = "Welch's two-tailed t-test"
+    confidence_interval_95: List[float] = Field(default_factory=list)
+    
+    # Detailed sample metrics
+    baseline_median_ms: float = 0.0
+    candidate_median_ms: float = 0.0
+    baseline_mean_ms: float = 0.0
+    candidate_mean_ms: float = 0.0
+    baseline_stddev_ms: float = 0.0
+    candidate_stddev_ms: float = 0.0
+    baseline_iqr_ms: float = 0.0
+    candidate_iqr_ms: float = 0.0
+    baseline_min_ms: float = 0.0
+    baseline_max_ms: float = 0.0
+    candidate_min_ms: float = 0.0
+    candidate_max_ms: float = 0.0
+    candidate_cv_pct: float = 0.0
+
     rationale: List[str] = Field(default_factory=list)
 
 
@@ -96,6 +114,12 @@ class EvidenceEvaluator:
         t_stat = (m1 - m2) / se if se > 0 else 0.0
         p_val = math.erfc(abs(t_stat) / math.sqrt(2)) if se > 0 else 1.0
 
+        # 95% Confidence Interval for mean difference (in ms)
+        diff_mean_ms = (m1 - m2) / 1e6
+        se_ms = se / 1e6
+        ci_low = round(diff_mean_ms - (1.96 * se_ms), 3)
+        ci_high = round(diff_mean_ms + (1.96 * se_ms), 3)
+
         stat_sig = (p_val < 0.05) and (speedup >= 1.02)
         b_stable = (b_rep.classification == StabilityClassification.STABLE)
         low_noise = (c_rep.cv <= 0.15)
@@ -139,5 +163,20 @@ class EvidenceEvaluator:
             cohens_d_effect_size=round(cohens_d, 2),
             p_value=round(p_val, 4),
             speedup_ratio=speedup,
+            test_used="Welch's two-tailed t-test",
+            confidence_interval_95=[ci_low, ci_high],
+            baseline_median_ms=round(b_med / 1e6, 3),
+            candidate_median_ms=round(c_med / 1e6, 3),
+            baseline_mean_ms=round(m1 / 1e6, 3),
+            candidate_mean_ms=round(m2 / 1e6, 3),
+            baseline_stddev_ms=round(s1 / 1e6, 3),
+            candidate_stddev_ms=round(s2 / 1e6, 3),
+            baseline_iqr_ms=round(b_rep.iqr_time_ns / 1e6, 3),
+            candidate_iqr_ms=round(c_rep.iqr_time_ns / 1e6, 3),
+            baseline_min_ms=round(b_rep.min_time_ns / 1e6, 3),
+            baseline_max_ms=round(b_rep.max_time_ns / 1e6, 3),
+            candidate_min_ms=round(c_rep.min_time_ns / 1e6, 3),
+            candidate_max_ms=round(c_rep.max_time_ns / 1e6, 3),
+            candidate_cv_pct=round(c_rep.cv * 100, 1),
             rationale=rationale,
         )

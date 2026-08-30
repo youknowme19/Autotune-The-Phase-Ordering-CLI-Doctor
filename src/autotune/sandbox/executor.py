@@ -63,7 +63,7 @@ class SandboxExecutor:
         try:
             proc = subprocess.Popen(
                 cmd,
-                stdin=subprocess.PIPE if stdin_data else None,
+                stdin=subprocess.PIPE if stdin_data is not None else subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
