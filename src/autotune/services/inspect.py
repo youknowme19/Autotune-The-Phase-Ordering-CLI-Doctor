@@ -28,6 +28,10 @@ class InspectionResult(BaseModel):
     instruction_count_delta: int = 0
 
 
+# Alias for naming consistency
+InspectResult = InspectionResult
+
+
 class InspectService:
     """Inspects LLVM IR transformations and assembly metrics for C/C++ workloads."""
 

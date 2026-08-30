@@ -23,6 +23,10 @@ class HistoryEntry(BaseModel):
     report_json_path: str
     report_html_path: str
 
+    @property
+    def run_id(self) -> str:
+        return self.id
+
 
 class HistoryManager:
     """Manages lightweight JSON-based history records under .autotune/history/."""
@@ -66,7 +70,11 @@ class HistoryManager:
         return entry
 
     @classmethod
-    def list_history(cls, source_filter: Optional[str] = None) -> List[HistoryEntry]:
+    def list_history(
+        cls,
+        source_filter: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[HistoryEntry]:
         h_dir = cls.get_history_dir()
         if not os.path.exists(h_dir):
             return []
@@ -84,6 +92,8 @@ class HistoryManager:
                         if s_name != entry.source_filename and source_filter != entry.source_path and source_filter != entry.source_hash:
                             continue
                     entries.append(entry)
+                    if limit and len(entries) >= limit:
+                        break
                 except Exception:
                     continue
         return entries

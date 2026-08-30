@@ -1,6 +1,7 @@
 """
 Evidence Scoring Engine and Decision Gate.
 Evaluates candidate results against rigor criteria and computes transparent EvidenceGrade (A/B/C/D/F).
+Supports Welch's t-test, Cohen's d effect size, Mann-Whitney U non-parametric test, and 95% Confidence Intervals.
 """
 
 from enum import Enum
@@ -32,8 +33,12 @@ class EvidenceScore(BaseModel):
     cohens_d_effect_size: float
     p_value: float = 1.0
     speedup_ratio: float
-    test_used: str = "Welch's two-tailed t-test"
+    test_used: str = "Welch's two-tailed t-test & Mann-Whitney U"
     confidence_interval_95: List[float] = Field(default_factory=list)
+
+    # Non-parametric metrics
+    mann_whitney_u: float = 0.0
+    mann_whitney_p_value: float = 1.0
     
     # Detailed sample metrics
     baseline_median_ms: float = 0.0
@@ -55,6 +60,29 @@ class EvidenceScore(BaseModel):
 
 class EvidenceEvaluator:
     """Evaluates experimental confirmation samples to compute EvidenceScore."""
+
+    @staticmethod
+    def compute_mann_whitney_u(b_samples: List[int], c_samples: List[int]) -> tuple[float, float]:
+        """Calculates Mann-Whitney U test statistic and asymptotic two-tailed p-value."""
+        n1, n2 = len(b_samples), len(c_samples)
+        if n1 == 0 or n2 == 0:
+            return 0.0, 1.0
+
+        u1 = 0.0
+        for b in b_samples:
+            for c in c_samples:
+                if b > c:
+                    u1 += 1.0
+                elif b == c:
+                    u1 += 0.5
+
+        mu_u = (n1 * n2) / 2.0
+        var_u = (n1 * n2 * (n1 + n2 + 1)) / 12.0
+        sigma_u = math.sqrt(var_u) if var_u > 0 else 1.0
+
+        z = (u1 - mu_u) / sigma_u
+        p_val = math.erfc(abs(z) / math.sqrt(2.0))
+        return round(u1, 2), round(p_val, 6)
 
     @staticmethod
     def evaluate(
@@ -114,6 +142,9 @@ class EvidenceEvaluator:
         t_stat = (m1 - m2) / se if se > 0 else 0.0
         p_val = math.erfc(abs(t_stat) / math.sqrt(2)) if se > 0 else 1.0
 
+        # Mann-Whitney U test
+        u_stat, u_pval = EvidenceEvaluator.compute_mann_whitney_u(baseline_samples_ns, candidate_samples_ns)
+
         # 95% Confidence Interval for mean difference (in ms)
         diff_mean_ms = (m1 - m2) / 1e6
         se_ms = se / 1e6
@@ -134,7 +165,7 @@ class EvidenceEvaluator:
             rationale.append(f"✓ Low candidate timing noise (CV={round(c_rep.cv*100, 1)}%).")
 
         if stat_sig:
-            rationale.append(f"✓ Statistically significant improvement (p={round(p_val, 4)}).")
+            rationale.append(f"✓ Statistically significant improvement (p={round(p_val, 4)}, Mann-Whitney p={round(u_pval, 4)}).")
 
         # Determine Evidence Grade with deterministic half-open intervals
         if not correctness_pass or speedup < 0.98:
@@ -162,8 +193,10 @@ class EvidenceEvaluator:
             statistically_significant=stat_sig,
             cohens_d_effect_size=round(cohens_d, 2),
             p_value=round(p_val, 4),
+            mann_whitney_u=u_stat,
+            mann_whitney_p_value=u_pval,
             speedup_ratio=speedup,
-            test_used="Welch's two-tailed t-test",
+            test_used="Welch's two-tailed t-test & Mann-Whitney U",
             confidence_interval_95=[ci_low, ci_high],
             baseline_median_ms=round(b_med / 1e6, 3),
             candidate_median_ms=round(c_med / 1e6, 3),

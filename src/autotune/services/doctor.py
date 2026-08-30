@@ -311,6 +311,77 @@ class DoctorService:
                 "doctor_report": doc_report.model_dump(),
                 "baseline_samples_ms": [round(s / 1e6, 3) for s in base_samples],
                 "candidate_samples_ms": [round(s / 1e6, 3) for s in cand_samples],
+                # Structured self-contained sections (Phase 9)
+                "experiment": {
+                    "run_id": run_id,
+                    "preset": preset,
+                    "search_mode": search_mode_str,
+                    "seed": seed,
+                    "generations": gen_count,
+                    "population": pop_size,
+                    "confirm_runs": confirm_runs,
+                },
+                "source": {
+                    "path": source,
+                    "filename": os.path.basename(source),
+                    "hash": source_hash,
+                    "lines_of_code": w_profile.lines_of_code,
+                },
+                "workload": {
+                    "input_file": workload,
+                    "args": args,
+                },
+                "environment": {
+                    "os": doc_report.os_name,
+                    "arch": doc_report.arch,
+                    "cpu_info": doc_report.cpu_info,
+                    "target_triple": doc_report.target_triple,
+                },
+                "toolchain": {
+                    "clang_version": doc_report.clang_version,
+                    "opt_version": doc_report.opt_version,
+                    "clang_path": doc_report.clang_path,
+                    "opt_path": doc_report.opt_path,
+                },
+                "baseline": {
+                    "median_ms": evidence_score.baseline_median_ms,
+                    "mean_ms": evidence_score.baseline_mean_ms,
+                    "stddev_ms": evidence_score.baseline_stddev_ms,
+                    "iqr_ms": evidence_score.baseline_iqr_ms,
+                    "min_ms": evidence_score.baseline_min_ms,
+                    "max_ms": evidence_score.baseline_max_ms,
+                    "samples_ms": [round(s / 1e6, 3) for s in base_samples],
+                },
+                "winner": {
+                    "pass_sequence": winning_passes,
+                    "median_ms": evidence_score.candidate_median_ms,
+                    "mean_ms": evidence_score.candidate_mean_ms,
+                    "stddev_ms": evidence_score.candidate_stddev_ms,
+                    "iqr_ms": evidence_score.candidate_iqr_ms,
+                    "min_ms": evidence_score.candidate_min_ms,
+                    "max_ms": evidence_score.candidate_max_ms,
+                    "cv_pct": evidence_score.candidate_cv_pct,
+                    "samples_ms": [round(s / 1e6, 3) for s in cand_samples],
+                },
+                "correctness": {
+                    "status": "PASS" if correctness_pass else "FAIL",
+                    "strategy": strat.name if hasattr(strat, "name") else "ExactOutput",
+                    "verdict": "CORRECT" if correctness_pass else "INCORRECT",
+                },
+                "statistics": {
+                    "speedup_ratio": confirmed_speedup,
+                    "evidence_grade": grade,
+                    "welch_p_value": evidence_score.p_value,
+                    "mann_whitney_u": evidence_score.mann_whitney_u,
+                    "mann_whitney_p_value": evidence_score.mann_whitney_p_value,
+                    "cohens_d": evidence_score.cohens_d_effect_size,
+                    "confidence_interval_95": evidence_score.confidence_interval_95,
+                    "test_used": evidence_score.test_used,
+                },
+                "reproduction": {
+                    "reproducible_clang_command": prescription.reproducible_clang_command,
+                    "reproduce_command": f"autotune reproduce {json_target}",
+                },
             }
 
             with open(json_target, "w", encoding="utf-8") as f:

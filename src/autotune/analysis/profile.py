@@ -40,6 +40,11 @@ class WorkloadProfiler:
     def __init__(self, clang_path: Optional[str] = None):
         self.analyzer = SourceAnalyzer(clang_path=clang_path)
 
+    @classmethod
+    def extract_profile(cls, source_path: str) -> WorkloadProfile:
+        profiler = cls()
+        return profiler.profile_file(source_path)
+
     def profile_file(
         self,
         source_path: str,

@@ -1,9 +1,13 @@
 """
-Doctor error codes and structured diagnostic error classes.
+Doctor error codes and structured diagnostic failure classifications.
+Provides standard failure categorizations:
+COMPILER_CRASH, COMPILATION_TIMEOUT, RUNTIME_TIMEOUT, SILENT_MISCOMPILATION,
+STATISTICAL_REGRESSION, PARITY, SUCCESSFUL_SPEEDUP, INCONCLUSIVE, and TOOL_FAILURE.
 """
 
 from enum import Enum
 from typing import Optional
+from pydantic import BaseModel
 
 
 class ErrorCode(str, Enum):
@@ -12,6 +16,26 @@ class ErrorCode(str, Enum):
     E03 = "E-03"  # Correctness divergence
     E04 = "E-04"  # LLVM / toolchain mismatch or missing tool
     E05 = "E-05"  # Measurement noise excessive
+
+
+class FailureCategory(str, Enum):
+    COMPILER_CRASH = "COMPILER_CRASH"
+    COMPILATION_TIMEOUT = "COMPILATION_TIMEOUT"
+    RUNTIME_TIMEOUT = "RUNTIME_TIMEOUT"
+    SILENT_MISCOMPILATION = "SILENT_MISCOMPILATION"
+    STATISTICAL_REGRESSION = "STATISTICAL_REGRESSION"
+    PARITY = "PARITY"
+    SUCCESSFUL_SPEEDUP = "SUCCESSFUL_SPEEDUP"
+    INCONCLUSIVE = "INCONCLUSIVE"
+    TOOL_FAILURE = "TOOL_FAILURE"
+
+
+class FailureDiagnostic(BaseModel):
+    category: FailureCategory
+    stage: str
+    reason: str
+    pipeline: Optional[str] = None
+    recommendation: str
 
 
 class DoctorError(Exception):

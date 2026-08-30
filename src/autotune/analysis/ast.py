@@ -197,3 +197,6 @@ class SourceAnalyzer:
             estimated_memory_intensity=mem_intensity,
             estimated_compute_intensity=compute_intensity,
         )
+
+
+ASTAnalyzer = SourceAnalyzer

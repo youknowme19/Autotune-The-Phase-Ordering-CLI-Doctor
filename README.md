@@ -1,355 +1,279 @@
 # Autotune — The LLVM Phase-Ordering CLI Doctor
 
-**An AI-guided compiler optimization doctor that searches, validates, and proves workload-specific LLVM pass sequences for C/C++ programs to outperform standard `-O3`.**
+**A production-grade, AI-guided compiler optimization and diagnostics system that systematically searches, verifies, and proves workload-specific LLVM pass pipelines for C/C++ workloads to outperform standard `-O3`.**
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![PyPI Package](https://img.shields.io/badge/PyPI-autotune--doctor-blue.svg)](https://pypi.org/project/autotune-doctor/)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-green.svg)](https://www.python.org/)
-[![LLVM](https://img.shields.io/badge/LLVM-15%2B-orange.svg)](https://llvm.org/)
+[![LLVM](https://img.shields.io/badge/LLVM-14%2B-orange.svg)](https://llvm.org/)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)](docs/benchmarking.md)
 
 ---
 
-## ⚡ What is Autotune?
+## ⚡ Core Product Philosophy
 
-**Autotune** is an open-source, production-grade command-line tool for developers, performance engineers, and compiler researchers who want to extract maximum performance from C and C++ programs.
+Autotune transforms compiler optimization from manual guesswork into a reproducible, developer-usable science:
 
-Instead of relying on fixed, one-size-fits-all optimization levels like `-O2` or `-O3`, Autotune systematically searches the phase-ordering space of **LLVM passes**, empirically validates every candidate's output correctness, collects repeated high-precision benchmark samples, calculates statistical significance, and generates reproducible optimization prescriptions and standalone HTML reports.
+1. **Analyze Workload**: Extract AST loop depths, memory intensity, branch density, and floating-point operations.
+2. **Empirical Baseline**: Benchmark the standard `clang -O3` pipeline across isolated warmup and timed runs.
+3. **Generate Candidates**: Seed candidate pass pipelines via LLM or deterministic AST heuristics (**100% functional offline**).
+4. **Search Space**: Evolve pass sequences using Genetic Algorithms and multi-armed bandit heuristics.
+5. **Strict Correctness**: Verify candidate execution against baseline using pluggable validation strategies.
+6. **Statistically Verify**: Calculate Welch's t-test, Mann-Whitney U tests, Cohen's d effect size, and Evidence Grades.
+7. **Explain Mechanics**: Deconstruct observed speedups into *Observed Facts*, *Inferred Mechanics*, and *Hypothesized Effects*.
+8. **Reproduce & Guard**: Validate speedup stability across environments and enforce CI regression gates.
+9. **Export & Apply**: Generate production compiler artifacts (`.ll`, `.optimized.ll`, `.s`, native binary, CMake, Make, and Shell scripts) without altering user source code.
 
-```bash
-pip install autotune-doctor
-
-autotune doctor kernel.c
-```
-
----
-
-## 🎯 Why Phase Ordering Matters
-
-### The Fixed `-O3` Problem
-When you compile with `clang -O3`, the compiler executes a predefined, monolithic pipeline of over 100 optimization passes in a predetermined order. While tuned as a general compromise for millions of diverse programs, a static pass ordering is rarely optimal for compute-heavy loops, matrix routines, or numerical kernels.
-
-### Phase Ordering Dynamics
-Compiler optimization passes interact non-linearly:
-* **Enabling Transformations:** One pass (e.g., `mem2reg`) promotes stack allocations into SSA registers, exposing opportunities for `gvn` (Global Value Numbering) or `licm` (Loop-Invariant Code Motion).
-* **Premature Canonicalization:** A pass executed too early can canonicalize IR into a shape that obscures loop structures needed by vectorizers.
-* **Workload Specialization:** Compute-bound and memory-bound kernels benefit from distinct pass orderings and loop transformation depths.
-
-Autotune automates the exploration of this combinatorial phase-ordering space using AST feature extraction, AI/heuristic candidate seeding, and a multi-fidelity Genetic Algorithm (GA).
+> [!IMPORTANT]
+> **The LLM is NEVER the final authority.** In Autotune, AI suggestions are treated as unverified candidate hypotheses. Only empirical execution, rigorous correctness validation, and statistical proof determine whether an optimization candidate is accepted.
 
 ---
 
-## 🔬 How Autotune Works
+## 🔬 System Workflow Architecture
 
-```text
-               C/C++ Source (.c / .cpp)
-                          ↓
-              AST & Workload Profiling
-                          ↓
-              Baseline -O3 Compilation
-                          ↓
-              Baseline Benchmark (Repeated Samples)
-                          ↓
-         Candidate Seeding (LLM or AST Heuristic)
-                          ↓
-          Genetic Algorithm Phase-Order Search
-                          ↓
-        Candidate Compilation (clang → opt → bin)
-                          ↓
-          Correctness Verification (100% Oracle)
-                          ↓
-            Multi-Sample Fresh Confirmation
-                          ↓
-       Statistical Rigor (Welch's t-test & Cohen's d)
-                          ↓
-        Decide Winner & Evidence Grade (A/B/C/D/F)
-                          ↓
-        Prescription, JSON Report, & Standalone HTML
+```mermaid
+flowchart TD
+    A[C/C++ Workload Source] --> B[AST Feature Extraction & Profiling]
+    B --> C[Baseline -O3 Benchmarking]
+    C --> D{Candidate Seeding}
+    D -->|Offline Heuristic| E[Domain Heuristic Seeds]
+    D -->|LLM Guided| F[Language Model Candidate Seeds]
+    E --> G[Genetic Algorithm Phase-Order Search]
+    F --> G
+    G --> H[Candidate Pipeline Compilation: clang -> opt -> native]
+    H --> I[Pluggable Correctness Validation Gate]
+    I -->|Failed / Miscompiled| J[Discard / Failure Diagnostic]
+    I -->|Passed| K[Fresh Multi-Sample Confirmation Benchmark]
+    K --> L[Statistical Analysis: Welch t-test, Mann-Whitney U, Cohen's d]
+    L --> M[Evidence Grading: Grade A / B / C / D / F]
+    M --> N[Structured JSON & HTML Reports]
+    N --> O[autotune explain / reproduce / guard / apply / export]
 ```
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Install via pip
+### 1. Installation
+
 ```bash
 pip install autotune-doctor
+# Or install in editable developer mode:
+git clone https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor.git
+cd Autotune-The-Phase-Ordering-CLI-Doctor
+pip install -e .
 ```
 
-### 2. Optimize a Kernel (Flagship Entrypoint)
+### 2. Verify Toolchain
+
 ```bash
-autotune doctor examples/matrix_transpose/kernel.c
+autotune doctor
+```
+
+### 3. Optimize a Workload (Flagship Command)
+
+```bash
+autotune doctor examples/matrix_transpose/kernel.c --preset quick
 ```
 
 Output:
 ```text
-╭──────────────────────────────────────────────╮
-│               AUTOTUNE DOCTOR                │
-│      LLVM Phase-Ordering Optimization        │
-╰──────────────────────────────────────────────╯
-
-Analyzing kernel.c                         ✓
-Extracting workload features              ✓
-Building -O3 baseline                     ✓
-
-Baseline:
-  Execution time: 71.655 ms
-
-Searching phase-order space...
-  Generation        4 / 5
-  Candidates        40
-  Valid candidates  37
-  Best candidate    60.231 ms
-
-Validating winner...
-  Correctness        ✓ PASS
-  Benchmark          ✓ PASS
-  Statistical test   ✓ PASS (p < 0.001)
+╭──────────────────────────────────────────────────────────╮
+│ AUTOTUNE DOCTOR                                          │
+│ AI-Guided LLVM Phase-Ordering Optimization & Diagnostics │
+╰──────────────────────────────────────────────────────────╯
+Analyzing kernel.c (Preset: quick)...
+  Generation 1/4 | Best: 28.781 ms | Speedup: 1.32x | Valid: 7
+  Generation 2/4 | Best: 28.781 ms | Speedup: 1.32x | Valid: 7
+  Generation 3/4 | Best: 28.742 ms | Speedup: 1.33x | Valid: 8
+  Generation 4/4 | Best: 28.742 ms | Speedup: 1.33x | Valid: 6
 
 🏆 OPTIMIZATION FOUND
+  - Baseline (-O3):  38.135 ms
+  - Autotune Winner: 29.119 ms
+  - Confirmed Gain:  1.31× (Grade A — IMPROVED)
+  - Correctness:     ✓ PASS
+  - Statistical p:   0.0000 (Cohen's d: 7.21)
 
-  -O3 Baseline:   71.655 ms
-  Autotune Best:  60.231 ms
-  Confirmed Gain: 1.19× (Grade A — IMPROVED)
-
-Winning pipeline:
-  reassociate → mem2reg → inline → instcombine → loop-simplify → indvars
+Winning pass pipeline:
+  sccp → gvn → mem2reg → lower-atomic → mem2reg
 
 Artifacts:
-  - JSON Report: .autotune/runs/run_.../report.json
-  - HTML Report: .autotune/runs/run_.../report.html
+  - JSON Report: /Volumes/SSD/autotune/.autotune/runs/run_.../report.json
+  - HTML Report: /Volumes/SSD/autotune/.autotune/runs/run_.../report.html
 
 Reproduce:
-  autotune reproduce .autotune/runs/run_.../report.json
+  autotune reproduce /Volumes/SSD/autotune/.autotune/runs/run_.../report.json
 ```
 
 ---
 
-## 🎛️ Optimization Presets
+## 🛠️ CLI Command Reference
 
-Autotune provides built-in presets designed for different developer workflows:
+### `autotune doctor`
+The flagship end-to-end optimization workflow.
 
-| Preset | Command | Search Budget | Recommended For |
-| :--- | :--- | :--- | :--- |
-| **quick** | `autotune doctor kernel.c --preset quick` | ~15s (8 pop, 4 gen) | Fast local exploration and rapid iteration |
-| **balanced** | `autotune doctor kernel.c --preset balanced` | ~30s (12 pop, 8 gen) | Default recommended mode for general optimization |
-| **aggressive** | `autotune doctor kernel.c --preset aggressive` | ~60s (20 pop, 15 gen) | Deep search with high confirmation sample count |
-
-Advanced users can override individual parameters:
 ```bash
-autotune doctor kernel.c --population 25 --generations 20 --seed 42 --workers 8 --time-budget 90
+autotune doctor <source> [OPTIONS]
+
+Options:
+  --preset [quick|balanced|aggressive]  Search preset (default: balanced)
+  --no-llm                              Enforce 100% offline heuristic search
+  --runs, -r INTEGER                    Benchmark measurement iterations (default: 7)
+  --warmup, -w INTEGER                  Warmup execution iterations (default: 2)
+  --output, -o PATH                     Path to export structured JSON report
+```
+
+### `autotune profile`
+Analyzes structural AST features, loop depth, memory vs compute intensity, and suggests pass candidates.
+
+```bash
+autotune profile examples/matrix_transpose/kernel.c
+# Machine-readable JSON output:
+autotune profile examples/matrix_transpose/kernel.c --json
+```
+
+### `autotune explain`
+Generates human-readable, scientifically grounded explanations of why an optimization pipeline works.
+
+```bash
+autotune explain .autotune/runs/run_latest/report.json
+```
+
+Explicitly breaks down analysis into:
+* **Observed Facts**: Verified empirical numbers, speedup delta, p-values, instruction deltas.
+* **Inferred Compiler Mechanics**: Concrete documented actions of each LLVM pass in the winning pipeline.
+* **Hypothesized Optimization Effects**: Plausible domain interactions (e.g. constant propagation unlocking scalar replacement).
+
+### `autotune apply`
+Reconstructs the winning pass pipeline and generates production compiler artifacts without altering user source code.
+
+```bash
+autotune apply .autotune/runs/run_latest/report.json --output-dir ./build/autotune/
+```
+
+Generates:
+* `kernel.ll` — Raw unoptimized LLVM IR.
+* `kernel.optimized.ll` — Transformed LLVM IR after applying the winning pass sequence.
+* `kernel.s` — Native target assembly.
+* `kernel.bin` — Compiled native binary executable.
+* `manifest.json` — Cryptographic provenance metadata, toolchain triples, and exact `clang`/`opt` shell commands.
+
+### `autotune export`
+Exports reproducible compilation recipes in multiple industry-standard formats.
+
+```bash
+# Export CMake build integration:
+autotune export report.json --format cmake -o autotune.cmake
+
+# Export standalone Shell build script:
+autotune export report.json --format shell -o build_optimized.sh
+
+# Export Makefile snippet:
+autotune export report.json --format make -o Makefile.autotune
+
+# Export complete deployment bundle (prescription.txt, reproduce.sh, CMakeLists.txt):
+autotune export report.json -o ./dist/
+```
+
+### `autotune reproduce`
+Validates whether a previously reported speedup holds up under fresh, independent re-benchmarking.
+
+```bash
+autotune reproduce report.json --runs 10 --tolerance 0.05
+```
+
+### `autotune guard`
+Continuous Integration performance gate preventing performance and correctness regressions.
+
+```bash
+# Standard CI guard check:
+autotune guard examples/matrix_transpose/kernel.c --reference report.json --threshold 0.05
+
+# Strict environment mode (fails if CPU architecture or LLVM major version differs):
+autotune guard examples/matrix_transpose/kernel.c --reference report.json --strict-env --ci
+```
+
+**Guard Exit Codes:**
+* `0`: **SUCCESS** (Within performance threshold and output is correct).
+* `1`: **PERFORMANCE REGRESSION** (Slowdown exceeds threshold).
+* `2`: **CORRECTNESS FAILURE** (Candidate output differed from baseline).
+* `3`: **INFRASTRUCTURE / ENVIRONMENT ERROR** (Compiler crash, timeout, or environment mismatch under `--strict-env`).
+
+### `autotune inspect`
+Inspects raw LLVM IR, `-O3` IR, optimized IR, diff previews, and assembly instruction metrics.
+
+```bash
+autotune inspect examples/matrix_transpose/kernel.c --report report.json
+```
+
+### `autotune history`
+Displays searchable historical runs, evidence grades, speedups, and pass sequences.
+
+```bash
+autotune history
+# Filter by workload:
+autotune history kernel.c --limit 10
+```
+
+### `autotune config`
+Manages secure API keys via OS Keyring (`Keychain` on macOS, `SecretService` on Linux).
+
+```bash
+# Inspect API configuration status (zero secrets leaked):
+autotune config status
+
+# Store API key in system keyring:
+autotune config keyring
 ```
 
 ---
 
-## 🔒 Security & Offline Mode
+## 🛡️ Correctness Validation Strategies
 
-Autotune features a strict **tri-state execution model**:
+Autotune provides modular, pluggable validation strategies to guarantee that optimized binaries produce identical results to unoptimized/baseline code:
 
-1. **Auto-Detection (Default):** If an API key is configured, Autotune uses LLM candidate seeding. If no key is found, it automatically runs in offline heuristic mode.
-2. **Explicit Offline (`--no-llm`):** Makes zero network requests, ignores API keys, uses offline AST heuristics, and works in air-gapped CI environments.
-3. **Explicit LLM (`--llm`):** Requests LLM candidate generation and produces a clear error if no key is configured.
-
-### Secure Credential Storage
-Store your API key securely in the OS keyring:
-```bash
-autotune config --provider openai
-```
-Or export the standard environment variable:
-```bash
-export OPENAI_API_KEY="sk-..."
-```
-> **Security Guarantee:** API keys are never printed to terminal logs, never written to JSON manifests, never included in HTML reports, and never exposed in error exceptions.
-
----
-
-## 📊 Scientific Benchmark Methodology
-
-Autotune adheres to strict experimental standards:
-1. **Repeated Measurements:** Never relies on a single timing run. Collects repeated warmup and benchmark runs.
-2. **Robust Statistics:** Reports median, mean, standard deviation, interquartile range (IQR), and coefficient of variation (CV%).
-3. **Hypothesis Testing:** Evaluates speedup significance using two-tailed Welch's $t$-test ($p < 0.05$).
-4. **Effect Size:** Computes Cohen's $d$ effect size to verify meaningful differences beyond system noise.
-5. **Confidence Intervals:** Calculates 95% Confidence Intervals for performance delta.
-6. **Evidence Grading System:**
-   * **Grade A:** Confirmed statistically significant speedup ($p < 0.05$, Cohen's $d \ge 0.8$, speedup $\ge 1.05\times$, low noise).
-   * **Grade B:** Confirmed statistically significant speedup ($p < 0.05$, speedup $\ge 1.02\times$).
-   * **Grade C:** Marginal or noisy speedup (insufficient statistical confidence).
-   * **Grade D:** Baseline parity (equivalent to `-O3`).
-   * **Grade F:** Confirmed regression, compilation failure, or output mismatch.
-
----
-
-## 🛡️ Failure Safety & Correctness
-
-Autotune enforces a multi-layer correctness and isolation gate:
-* **Output Validation Oracle:** Validates stdout, stderr, and exit codes of every candidate against the trusted baseline run.
-* **Automatic Disqualification:** Any candidate producing invalid output, crashes, or timeouts is assigned infinite penalty fitness and permanently rejected.
-* **Fault Isolation:** Compiler crashes or pass timeouts in one candidate are isolated in a sandbox and do not terminate the search.
-
----
-
-## 🔄 Experiment Reproduction (`autotune reproduce`)
-
-Every completed optimization experiment can be reproduced with a single command:
-```bash
-autotune reproduce .autotune/runs/run_20260830_abcd1234/report.json
-```
-
-Verdicts returned:
-* `REPRODUCED`: Observed performance matches recorded speedup within tolerance.
-* `NOT_REPRODUCED`: Performance deviated beyond expected tolerance.
-* `INCONCLUSIVE`: High environmental measurement noise detected (CV > 20%).
-
----
-
-## 🛡️ CI/CD Performance Guard (`autotune guard`)
-
-Prevent performance regressions in continuous integration workflows:
-```bash
-autotune guard src/kernel.c --reference .autotune/runs/baseline_report.json --threshold 0.05 --ci
-```
-
-Deterministic exit codes:
-* `0`: **PASS** — Performance within tolerance.
-* `1`: **PERFORMANCE REGRESSION** — Latency degraded beyond threshold.
-* `2`: **CORRECTNESS FAILURE** — Output mismatch against baseline.
-* `3`: **INFRASTRUCTURE ERROR** — Missing source or compiler error.
-
----
-
-## ⚖️ Heuristic vs LLM Comparison (`autotune compare`)
-
-Compare search efficacy between offline heuristic seeding and AI-guided seeding on the same source kernel:
-```bash
-autotune compare examples/matrix_transpose/kernel.c --preset quick
-```
-
-Or compare two JSON search reports side-by-side:
-```bash
-autotune compare report_run_a.json report_run_b.json
-```
-
----
-
-## 🔍 IR & Assembly Inspection (`autotune inspect`)
-
-Inspect LLVM IR transformations, structural IR diffs, and assembly metrics:
-```bash
-autotune inspect examples/matrix_transpose/kernel.c
-```
-Or inspect assembly during doctor optimization:
-```bash
-autotune doctor examples/matrix_transpose/kernel.c --assembly
-```
-
-Computes and displays:
-* Total instruction count differences
-* SIMD / Vector instruction count gains (NEON / AVX / SSE)
-* Branch and loop structure changes
-* Unified LLVM IR diff (Baseline vs Optimized)
-
----
-
-## 📜 Full Command Reference
-
-| Command | Description |
+| Strategy | Validation Mechanism |
 | :--- | :--- |
-| `autotune doctor <source>` | Flagship entrypoint: profile, search, validate, and export reports |
-| `autotune doctor` | Run system and toolchain diagnostic checks |
-| `autotune reproduce <report.json>` | Verify and reproduce a recorded optimization report |
-| `autotune guard <source>` | Performance regression guard for CI pipelines |
-| `autotune compare <source>` | Run controlled A/B search comparing Heuristic vs LLM seeding |
-| `autotune compare <rep_a> <rep_b>` | Compare two experiment reports side-by-side |
-| `autotune inspect <source>` | Inspect LLVM IR diffs and assembly metrics |
-| `autotune diff-ir <report.json>` | View structural IR differences from a search report |
-| `autotune history [source]` | View past optimization experiment history |
-| `autotune resume <id>` | Resume an interrupted GA search from snapshot |
-| `autotune search <source>` | Low-level Genetic Algorithm pass search |
-| `autotune diagnose <source>` | Profile source AST and measure baseline `-O3` |
-| `autotune bench-suite <dir>` | Batch stress-testing across multiple benchmark kernels |
-| `autotune explain <pipeline>` | Explain compiler optimization semantics of LLVM passes |
-| `autotune config` | Securely store LLM provider API credentials |
-| `autotune status` | Display toolchain availability, cache stats, and memory records |
-| `autotune cache [status\|clear]` | Inspect or clear persistent compilation and benchmark caches |
-| `autotune bundle <report.json>` | Export a self-contained research reproduction bundle |
-| `autotune runs [list\|clean]` | Manage local experiment run directories |
+| **ExactOutputValidator** | Bitwise stdout comparison (with automatic execution time stripping). |
+| **ExitCodeValidator** | Ensures candidate process returns exit code 0. |
+| **StdoutValidator** | Substring and regex match verification. |
+| **ChecksumValidator** | Verifies CRC32/SHA256 checksums embedded in output. |
+| **NumericToleranceValidator**| Floating-point delta comparison within absolute/relative tolerance. |
+| **FileDigestValidator** | Verifies external file artifacts produced during execution. |
+| **CustomScriptValidator** | Invokes external validation scripts for complex verification. |
+| **CompositeValidator** | Chains multiple validation strategies in series. |
 
 ---
 
-## 🏛️ Architecture
+## 📊 Statistical Rigor & Evidence Grades
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                       AUTOTUNE CLI                          │
-│   doctor | reproduce | guard | compare | inspect | history   │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-               ┌───────────────┴───────────────┐
-               ▼                               ▼
-    ┌──────────────────────┐        ┌──────────────────────┐
-    │ Workload Profiler    │        │ Toolchain & Hardware │
-    │ AST Feature Extractor│        │ Diagnostic Checks    │
-    └──────────┬───────────┘        └──────────┬───────────┘
-               │                               │
-               └───────────────┬───────────────┘
-                               ▼
-    ┌─────────────────────────────────────────────────────────┐
-    │                 CANDIDATE SEEDING                       │
-    │   LLM Client (OpenAI/Anthropic/Gemini) OR AST Heuristic │
-    └──────────────────────────┬──────────────────────────────┘
-                               ▼
-    ┌─────────────────────────────────────────────────────────┐
-    │             GENETIC ALGORITHM SEARCH ENGINE             │
-    │   Mutation | Crossover | Selection | Multi-Fidelity GA  │
-    └──────────────────────────┬──────────────────────────────┘
-                               ▼
-    ┌─────────────────────────────────────────────────────────┐
-    │                   COMPILER DRIVER                       │
-    │      Clang (-O0) → Opt (-passes=...) → Native Emit      │
-    └──────────────────────────┬──────────────────────────────┘
-                               ▼
-    ┌─────────────────────────────────────────────────────────┐
-    │                EXECUTION & VALIDATION                   │
-    │    Sandbox Executor → Correctness Validator Oracle      │
-    │    Multi-Sample Benchmark Runner → Stability Analyzer   │
-    └──────────────────────────┬──────────────────────────────┘
-                               ▼
-    ┌─────────────────────────────────────────────────────────┐
-    │                EVIDENCE & REPORTING                     │
-    │   Welch's t-test | Cohen's d | 95% CI | Evidence Grade   │
-    │   JSON Manifest | Standalone HTML | History Store       │
-    └─────────────────────────────────────────────────────────┘
-```
+Autotune does not rely on single-run measurements. Every candidate is evaluated using interleaved runs, Coefficient of Variation (`CV%`) noise checks, and non-parametric statistical tests:
+
+* **Welch's t-test**: Parametric two-sample t-test for unequal variances ($p$-value).
+* **Mann-Whitney U test**: Non-parametric rank-sum test robust against outliers and non-normal timing distributions.
+* **Cohen's d**: Standardized effect size quantifying practical optimization impact ($d > 0.8$ denotes large effect).
+
+### Evidence Grading Matrix
+
+| Grade | Classification | Speedup ($\times$) | Statistical Confidence | Action |
+| :---: | :--- | :---: | :--- | :--- |
+| **A** | `IMPROVED` | $\ge 1.05\times$ | $p < 0.05$, $d > 0.5$, CV $< 10\%$ | Eligible for Production & Knowledge Store |
+| **B** | `MODEST_GAIN` | $1.02\times - 1.05\times$ | $p < 0.05$, $d > 0.2$, CV $< 12\%$ | Statistically significant minor improvement |
+| **C** | `NOISY_IMPROVEMENT` | $> 1.02\times$ | $p \ge 0.05$ or High Variance | Improvement observed but noisy |
+| **D** | `PARITY` | $0.98\times - 1.02\times$ | Indistinguishable from $-O3$ | Optimization neutral |
+| **F** | `REGRESSION` / `FAIL` | $< 0.98\times$ or Error | Incorrect output, crash, or slowdown | Immediate Discard |
 
 ---
 
-## 🧪 PolyBench/C Multi-Workload Benchmarks
+## 🔒 Security & Offline Guarantees
 
-Autotune supports standard compute benchmark suites including PolyBench/C:
-```bash
-autotune bench-suite polybench/ --generations 5 --population 10
-```
-
-Supported workloads:
-* `matrix_transpose`
-* `2mm` (Two Matrix Multiplications)
-* `gemm` (General Matrix Multiply)
-* `atax` (Matrix Transpose and Vector Multiplication)
-* `bicg` (BiCG Subkernel)
-* `cholesky` (Cholesky Decomposition)
-
----
-
-## 🔬 Research Direction: AI as Guidance, Measurement as Authority
-
-Autotune embodies a core scientific principle:
-> **LLMs are generative seed accelerators; empirical measurement remains the sole authority.**
-
-Large Language Models analyze AST and code semantics to propose intelligent initial pass sequences. However, every optimization claim is strictly validated by compiling bitcode, proving exact correctness, and running statistically confirmed physical hardware benchmarks.
+* **Zero Secret Leakage**: API keys stored in the OS keyring are never logged to console, written to JSON/HTML reports, or embedded in exports.
+* **100% Offline Capability**: With `--no-llm`, Autotune runs entirely locally using AST heuristics and genetic algorithms with zero network calls.
+* **Non-Destructive**: `autotune apply` outputs to `.autotune/artifacts/` or custom directories; original source code is never mutated.
 
 ---
 
 ## 📄 License
 
-Autotune is licensed under the [Apache 2.0 License](LICENSE).
+Autotune is distributed under the **Apache 2.0 License**. See [LICENSE](LICENSE) for details.

@@ -40,11 +40,19 @@ from autotune.services import (
     GuardResult,
     GuardExitCode,
     InspectService,
-    InspectionResult,
+    InspectResult,
     HistoryManager,
+    HistoryEntry,
     CompareService,
-    ComparisonResult,
-    LiveComparisonResult,
+    CompareResult,
+    ProfileService,
+    ProfileFeatureSummary,
+    ExplainService,
+    OptimizationExplanation,
+    ApplyService,
+    ApplyResult,
+    ExportService,
+    ExportResult,
     OptimizeService,
     ValidateService,
     ReportService,
@@ -211,27 +219,87 @@ def doctor(
 
 
 @app.command()
+def profile(
+    source: str = typer.Argument(..., help="Path to C/C++ source kernel file"),
+    json_output: bool = typer.Option(False, "--json", help="Output profile in JSON format"),
+    no_llm: bool = typer.Option(False, "--no-llm", help="Explicitly ensure 100% offline analysis"),
+):
+    """Analyze and profile workload characteristics, loop depth, memory ops, and potential optimization areas."""
+    try:
+        prof = ProfileService.profile_workload(source)
+        if json_output:
+            console.print(json.dumps(prof.model_dump(), indent=2))
+            return
+
+        console.print(Panel(
+            f"[bold cyan]AUTOTUNE WORKLOAD PROFILE[/bold cyan]\n"
+            f"[dim]Source: {prof.source_filename}[/dim]",
+            border_style="cyan",
+            expand=False,
+        ))
+        console.print(f"Source:           [bold white]{prof.source_path}[/bold white]")
+        console.print(f"Language:         [bold green]{prof.language}[/bold green]")
+        console.print(f"Functions:        [cyan]{prof.function_count}[/cyan]")
+        console.print(f"Lines of Code:    [white]{prof.lines_of_code}[/white]")
+        
+        loop_color = "red" if prof.loop_intensity == "HIGH" else ("yellow" if prof.loop_intensity == "MEDIUM" else "dim")
+        mem_color = "red" if prof.memory_intensity == "HIGH" else ("yellow" if prof.memory_intensity == "MEDIUM" else "dim")
+        br_color = "red" if prof.branch_intensity == "HIGH" else ("yellow" if prof.branch_intensity == "MEDIUM" else "dim")
+        fp_color = "red" if prof.floating_point_intensity == "HIGH" else ("yellow" if prof.floating_point_intensity == "MEDIUM" else "dim")
+        call_color = "red" if prof.function_calls_intensity == "HIGH" else ("yellow" if prof.function_calls_intensity == "MEDIUM" else "dim")
+
+        console.print(f"Loops:            [bold {loop_color}]{prof.loop_intensity}[/bold {loop_color}] ({prof.loop_count} loops, max depth {prof.max_loop_depth})")
+        console.print(f"Memory Operations:[bold {mem_color}]{prof.memory_intensity}[/bold {mem_color}] ({prof.pointer_derefs} ptr derefs, {prof.array_accesses} array ops)")
+        console.print(f"Branches:         [bold {br_color}]{prof.branch_intensity}[/bold {br_color}]")
+        console.print(f"Floating Point:   [bold {fp_color}]{prof.floating_point_intensity}[/bold {fp_color}] ({prof.float_ops} float ops)")
+        console.print(f"Function Calls:   [bold {call_color}]{prof.function_calls_intensity}[/bold {call_color}]")
+        console.print("\n[bold cyan]Potential Optimization Areas:[/bold cyan]")
+        for area in prof.potential_optimization_areas:
+            console.print(f"  • [green]{area}[/green]")
+        console.print("")
+    except Exception as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def reproduce(
     report_json: str = typer.Argument(..., help="Path to JSON experiment report file"),
     tolerance: float = typer.Option(0.10, "--tolerance", "-t", help="Reproducibility tolerance threshold (0.10 for 10%)"),
     runs: int = typer.Option(15, "--runs", "-r", help="Number of benchmark repetitions"),
     warmup: int = typer.Option(3, "--warmup", help="Warmup runs"),
     workload: Optional[str] = typer.Option(None, "--workload", "-w", help="Optional workload input file path"),
+    json_output: bool = typer.Option(False, "--json", help="Output reproduction result in JSON format"),
 ):
     """Reconstruct an experiment from report JSON, validate correctness, and verify performance reproduction."""
     try:
-        console.print(Panel("[bold cyan]AUTOTUNE EXPERIMENT REPRODUCTION[/bold cyan]", border_style="cyan", expand=False))
         res = ReproduceService.reproduce(report_path=report_json, tolerance=tolerance, runs=runs, warmup=warmup, workload=workload)
+
+        if json_output:
+            console.print(json.dumps(res.model_dump(), indent=2))
+            return
+
+        console.print(Panel("[bold cyan]AUTOTUNE EXPERIMENT REPRODUCTION[/bold cyan]", border_style="cyan", expand=False))
+        if res.environment_warnings:
+            console.print("[bold yellow]⚠ Environment Warnings:[/bold yellow]")
+            for w in res.environment_warnings:
+                console.print(f"  [yellow]• {w}[/yellow]")
+            console.print("")
 
         table = Table(title="Reproduction Verification Summary", border_style="cyan")
         table.add_column("Property", style="bold white")
-        table.add_column("Recorded (Report)", style="yellow")
-        table.add_column("Observed (Fresh Run)", style="green")
+        table.add_column("Original (Report)", style="yellow")
+        table.add_column("Reproduction (Fresh Run)", style="green")
+        table.add_column("Difference", style="bold magenta")
 
-        table.add_row("Speedup Ratio", f"{res.recorded_speedup:.2f}x", f"{res.observed_speedup:.2f}x")
-        table.add_row("Candidate Time", f"{res.recorded_candidate_ms:.3f} ms", f"{res.observed_candidate_ms:.3f} ms")
-        table.add_row("Baseline Time", "N/A", f"{res.observed_baseline_ms:.3f} ms")
-        table.add_row("Correctness", "PASS", res.correctness_status)
+        b_diff_str = f"{res.baseline_delta_pct:+.1f}%" if res.recorded_baseline_ms > 0 else "N/A"
+        c_diff_str = f"{res.candidate_delta_pct:+.1f}%" if res.recorded_candidate_ms > 0 else "N/A"
+        s_diff_str = f"{res.speedup_delta_pct:.1f}%"
+
+        table.add_row("Baseline (-O3)", f"{res.recorded_baseline_ms:.3f} ms" if res.recorded_baseline_ms > 0 else "N/A", f"{res.observed_baseline_ms:.3f} ms", b_diff_str)
+        table.add_row("Candidate", f"{res.recorded_candidate_ms:.3f} ms" if res.recorded_candidate_ms > 0 else "N/A", f"{res.observed_candidate_ms:.3f} ms", c_diff_str)
+        table.add_row("Speedup Ratio", f"{res.recorded_speedup:.2f}×", f"{res.observed_speedup:.2f}×", s_diff_str)
+        table.add_row("Correctness", "PASS", res.correctness_status, "MATCH")
 
         console.print(table)
 
@@ -260,6 +328,7 @@ def guard(
     workload: Optional[str] = typer.Option(None, "--workload", "-w", help="Workload input file path"),
     runs: int = typer.Option(15, "--runs", help="Benchmark repetitions"),
     warmup: int = typer.Option(3, "--warmup", help="Warmup repetitions"),
+    strict_env: bool = typer.Option(False, "--strict-env", help="Enforce identical CPU architecture and toolchain"),
     ci: bool = typer.Option(False, "--ci", help="CI machine-readable mode"),
 ):
     """Performance Regression Guard: Compares current execution against reference to protect performance in CI."""
@@ -270,14 +339,33 @@ def guard(
         workload=workload,
         runs=runs,
         warmup=warmup,
+        strict_env=strict_env,
     )
 
     if ci:
-        console.print(f"[GUARD] Status: {res.status} | Regression: {res.regression_pct:+.1f}% (Threshold: {res.threshold_pct:.1f}%) | Exit: {int(res.exit_code)}")
+        console.print(f"AUTOTUNE CI GUARD")
+        console.print(f"Correctness: {res.correctness_status}")
+        console.print(f"Performance: {'PASS' if res.exit_code == GuardExitCode.PASS else 'FAIL'}")
+        console.print(f"Regression threshold: {res.threshold_pct:.1f}%")
+        console.print(f"Baseline:    {res.reference_ms:.2f} ms")
+        console.print(f"Current:     {res.current_ms:.2f} ms")
+        console.print(f"Delta:       {res.regression_pct:+.1f}%")
+        console.print(f"Result:      {res.status}")
+        if res.environment_warnings:
+            for w in res.environment_warnings:
+                console.print(f"Warning:     {w}")
         raise typer.Exit(code=int(res.exit_code))
 
     console.print(Panel("[bold cyan]AUTOTUNE PERFORMANCE GUARD[/bold cyan]", border_style="cyan", expand=False))
+    if res.environment_warnings:
+        console.print("[bold yellow]⚠ Environment Warnings:[/bold yellow]")
+        for w in res.environment_warnings:
+            console.print(f"  [yellow]• {w}[/yellow]")
+        console.print("")
+
     delta_color = "red" if res.regression_pct > res.threshold_pct else "green"
+    console.print(f"Reference:     [bold white]{res.reference_ms:.3f} ms[/bold white]")
+    console.print(f"Current:       [bold white]{res.current_ms:.3f} ms[/bold white]")
     console.print(f"Delta:         [{delta_color}]{res.regression_pct:+.1f}%[/{delta_color}] (Threshold: {res.threshold_pct:.1f}%)")
     console.print(f"Correctness:   [bold green]✓ {res.correctness_status}[/bold green]")
     status_color = "green" if res.exit_code == GuardExitCode.PASS else "red"
@@ -289,24 +377,31 @@ def guard(
 @app.command()
 def history(
     source: Optional[str] = typer.Argument(None, help="Optional source filename or hash to filter history"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Maximum entries to display"),
+    json_output: bool = typer.Option(False, "--json", help="Output history in JSON format"),
 ):
     """Display past experiment history and optimization records from .autotune/history/."""
-    entries = HistoryManager.list_history(source_filter=source)
+    entries = HistoryManager.list_history(source_filter=source, limit=limit)
+    if json_output:
+        console.print(json.dumps([e.model_dump() for e in entries], indent=2))
+        return
+
     if not entries:
         console.print("[dim]No historical optimization runs recorded yet.[/dim]")
         return
 
     table = Table(title="Autotune Experiment History", border_style="cyan")
+    table.add_column("ID", style="bold cyan")
     table.add_column("Date", style="dim")
     table.add_column("Workload", style="bold white")
     table.add_column("Speedup", style="bold green")
     table.add_column("Grade", style="cyan")
-    table.add_column("Classification", style="yellow")
+    table.add_column("Status", style="yellow")
     table.add_column("Winning Pipeline", style="magenta")
 
     for e in entries:
         pipe_str = " → ".join(e.winning_passes) if e.winning_passes else "Baseline (-O3)"
-        table.add_row(e.timestamp[:10], e.source_filename, f"{e.speedup_ratio}x", f"Grade {e.evidence_grade}", e.classification, pipe_str)
+        table.add_row(e.run_id[:8], e.timestamp[:10], e.source_filename, f"{e.speedup_ratio:.2f}×", f"Grade {e.evidence_grade}", e.classification, pipe_str)
 
     console.print(table)
 
@@ -686,57 +781,56 @@ def search(
 
 @app.command()
 def export(
-    report_json: str = typer.Argument(..., help="Path to JSON search report file exported by autotune search"),
-    output_dir: str = typer.Option("./autotune_prescription", "--output-dir", "-o", help="Output directory path for prescription assets"),
+    report_json: str = typer.Argument(..., help="Path to JSON optimization report file"),
+    format: str = typer.Option("json", "--format", "-f", help="Export format [json|shell|cmake|make]"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Optional output file path"),
 ):
-    """Export reproducible prescription scripts and manifests from a JSON search report."""
-    if not os.path.exists(report_json):
-        console.print(f"[bold red]Error: Report JSON file '{report_json}' not found.[/bold red]")
-        raise typer.Exit(code=2)
+    """Export reproducible build recipes and integration files in JSON, Shell, CMake, or Make format."""
+    try:
+        res = ExportService.export(report_path=report_json, export_format=format, output_path=output)
+        if output:
+            console.print(f"[bold green]✓ Exported {format.upper()} recipe to: [cyan]{output}[/cyan][/bold green]")
+        else:
+            console.print(res.content)
+    except Exception as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
+        raise typer.Exit(code=1)
 
-    with open(report_json, "r", encoding="utf-8") as f:
-        data = json.load(f)
 
-    prescription_data = data.get("prescription")
-    if not prescription_data:
-        console.print(f"[bold yellow]Warning: No prescription data found in report JSON '{report_json}'.[/bold yellow]")
-        raise typer.Exit(code=2)
+@app.command()
+def apply(
+    report_json: str = typer.Argument(..., help="Path to JSON optimization report file"),
+    output_dir: Optional[str] = typer.Option(None, "--output-dir", "-o", help="Custom output directory for artifacts (default: .autotune/artifacts/<run_id>/)"),
+):
+    """Reconstruct winning optimization pass pipeline and export production compiler artifacts (.ll, .s, binary, manifest.json)."""
+    try:
+        console.print(Panel("[bold cyan]AUTOTUNE APPLY — PRODUCTION COMPILER ARTIFACTS[/bold cyan]", border_style="cyan", expand=False))
+        res = ApplyService.apply_report(report_json, output_dir=output_dir)
+        if not res.success:
+            console.print(f"[bold red]Apply failed: {res.error_message}[/bold red]")
+            raise typer.Exit(code=1)
 
-    os.makedirs(output_dir, exist_ok=True)
-    
-    txt_path = os.path.join(output_dir, "prescription.txt")
-    sh_path = os.path.join(output_dir, "reproduce.sh")
-    json_path = os.path.join(output_dir, "prescription.json")
+        table = Table(title="Generated Production Compiler Artifacts", border_style="cyan")
+        table.add_column("Artifact Type", style="bold white")
+        table.add_column("File Path", style="bold green")
 
-    cmd = prescription_data.get("reproducible_clang_command", "")
-    passes = prescription_data.get("pass_sequence", {}).get("passes", [])
+        if res.raw_ir_path:
+            table.add_row("Unoptimized LLVM IR", res.raw_ir_path)
+        if res.optimized_ir_path:
+            table.add_row("Optimized LLVM IR", res.optimized_ir_path)
+        if res.assembly_path:
+            table.add_row("Native Assembly (.s)", res.assembly_path)
+        if res.binary_path:
+            table.add_row("Native Executable Binary", res.binary_path)
+        if res.manifest_path:
+            table.add_row("Artifact Manifest (JSON)", res.manifest_path)
 
-    with open(txt_path, "w", encoding="utf-8") as f:
-        f.write("AUTOTUNE COMPILER PRESCRIPTION\n")
-        f.write("==============================\n")
-        f.write(f"Source Path:     {data.get('source_path', 'N/A')}\n")
-        f.write(f"Speedup Ratio:   {prescription_data.get('speedup_ratio', 1.0)}x\n")
-        f.write(f"Pass Sequence:   {passes}\n\n")
-        f.write("Reproducible Compiler Command:\n")
-        f.write(f"{cmd}\n")
-
-    with open(sh_path, "w", encoding="utf-8") as f:
-        f.write("#!/bin/bash\n")
-        f.write("# Autotune Reproducible Build Script\n")
-        f.write("set -euo pipefail\n\n")
-        f.write(f"echo 'Building optimized binary with pass sequence: {passes}'\n")
-        f.write(f"{cmd}\n")
-        f.write("echo 'Build complete: optimized_kernel.bin created.'\n")
-
-    os.chmod(sh_path, 0o755)
-
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(prescription_data, f, indent=2)
-
-    console.print(f"[bold green]Successfully exported prescription assets to directory '{output_dir}/':[/bold green]")
-    console.print(f"  - [cyan]{txt_path}[/cyan] (Text summary)")
-    console.print(f"  - [cyan]{sh_path}[/cyan] (Executable build script)")
-    console.print(f"  - [cyan]{json_path}[/cyan] (JSON metadata)")
+        console.print(table)
+        console.print(f"\n[bold green]✓ Optimization applied successfully into [cyan]{res.output_dir}[/cyan][/bold green]")
+        console.print(f"[dim]Source code was preserved untouched.[/dim]\n")
+    except Exception as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
+        raise typer.Exit(code=1)
 
 
 @app.command(name="bench-suite")
@@ -779,22 +873,56 @@ def bench_suite(
 
 @app.command()
 def explain(
-    target: str = typer.Argument(..., help="Comma-separated LLVM pass sequence string or JSON search report filepath"),
+    target: str = typer.Argument(..., help="Path to JSON optimization report file or comma-separated pass sequence"),
+    json_output: bool = typer.Option(False, "--json", help="Output explanation in JSON format"),
 ):
-    """Inspect and explain the optimization semantics, decision rationale, and expected impact of an LLVM pass pipeline or report."""
-    from autotune.reporting.explain import PipelineInspector
+    """Explain discovered LLVM pass pipelines, compiler transformation mechanics, and empirical evidence."""
+    try:
+        if os.path.exists(target) and target.endswith(".json"):
+            exp = ExplainService.explain_report(target)
+            if json_output:
+                console.print(json.dumps(exp.model_dump(), indent=2))
+                return
 
-    passes_list: List[str] = []
-    report_data: Optional[Dict[str, Any]] = None
+            console.print(Panel(
+                "[bold cyan]AUTOTUNE OPTIMIZATION EXPLANATION[/bold cyan]\n"
+                f"[dim]Workload: {os.path.basename(exp.source_path)}[/dim]",
+                border_style="cyan",
+                expand=False,
+            ))
+            console.print(f"Baseline:    [bold white]{exp.baseline_mode}[/bold white] ({exp.baseline_time_ms:.3f} ms)")
+            console.print(f"Candidate:   [bold green]{exp.candidate_time_ms:.3f} ms[/bold green]")
+            console.print(f"Speedup:     [bold yellow]{exp.speedup_ratio:.2f}×[/bold yellow]")
+            console.print(f"Correctness: [bold green]✓ {exp.correctness_status}[/bold green]")
+            console.print(f"Statistical: [cyan]p = {exp.p_value:.4f}, Cohen's d = {exp.cohens_d:.2f}, Grade {exp.evidence_grade}[/cyan]")
+            
+            if exp.winning_passes:
+                console.print(f"\nWinning Pipeline:")
+                console.print(f"  [bold cyan]{' → '.join(exp.winning_passes)}[/bold cyan]")
 
-    if os.path.exists(target) and target.endswith(".json"):
-        with open(target, "r", encoding="utf-8") as f:
-            report_data = json.load(f)
-        p_dict = report_data.get("prescription") or {}
-        seq_dict = p_dict.get("pass_sequence") or {} if isinstance(p_dict, dict) else {}
-        passes_list = seq_dict.get("passes", []) if isinstance(seq_dict, dict) else []
+            console.print(f"\n[bold green]WHY THIS MAY HELP[/bold green]")
+            console.print("[dim]--- Observed Empirical Facts ---[/dim]")
+            for fact in exp.observed_facts:
+                console.print(f"  • [white]{fact}[/white]")
+            console.print("\n[dim]--- Inferred Compiler Mechanics ---[/dim]")
+            for mech in exp.inferred_mechanics:
+                console.print(f"  • [cyan]{mech}[/cyan]")
+            console.print("\n[dim]--- Hypothesized Optimization Effects ---[/dim]")
+            for hyp in exp.hypothesized_effects:
+                console.print(f"  • [yellow]{hyp}[/yellow]")
 
-        if passes_list:
+            console.print(f"\n[dim]{exp.disclaimer}[/dim]\n")
+
+            from autotune.reporting.explain import PipelineInspector
+            with open(target, "r", encoding="utf-8") as f:
+                rep_json_data = json.load(f)
+            rationale_lines = PipelineInspector.explain_report(rep_json_data)
+            panel_text = "\n".join(f"[white]{line}[/white]" for line in rationale_lines)
+            console.print(Panel(panel_text, title="[bold cyan]Decision Rationale & Confirmation Summary[/bold cyan]", border_style="green"))
+            return
+        else:
+            passes_list = [p.strip() for p in target.replace(",", " ").split() if p.strip()]
+            from autotune.reporting.explain import PipelineInspector
             seq = PassSequence(passes=passes_list)
             inspector = PipelineInspector()
             explanations = inspector.explain(seq)
@@ -805,39 +933,13 @@ def explain(
             table.add_column("Description", style="white")
             table.add_column("Expected Impact", style="bold green")
 
-            for exp in explanations:
-                table.add_row(exp.pass_name, exp.domain, exp.description, exp.expected_impact)
+            for exp_item in explanations:
+                table.add_row(exp_item.pass_name, exp_item.domain, exp_item.description, exp_item.expected_impact)
 
             console.print(table)
-        else:
-            console.print("[yellow]Note: Report contains no custom pass sequence prescription (baseline -O3 parity or regression).[/yellow]")
-
-        if report_data:
-            rationale_lines = PipelineInspector.explain_report(report_data)
-            panel_text = "\n".join(f"[white]{line}[/white]" for line in rationale_lines)
-            console.print(Panel(panel_text, title="[bold cyan]Scientific Decision Rationale & Confirmation Summary[/bold cyan]", border_style="green"))
-        return
-    else:
-        passes_list = [p.strip() for p in target.replace(",", " ").split() if p.strip()]
-
-    if not passes_list:
-        console.print(f"[bold red]Error: No valid LLVM passes provided to explain.[/bold red]")
-        raise typer.Exit(code=2)
-
-    seq = PassSequence(passes=passes_list)
-    inspector = PipelineInspector()
-    explanations = inspector.explain(seq)
-
-    table = Table(title="LLVM Pass Pipeline Explanation & Optimization Domains", border_style="cyan")
-    table.add_column("Pass Name", style="bold white")
-    table.add_column("Optimization Domain", style="bold cyan")
-    table.add_column("Description", style="white")
-    table.add_column("Expected Impact", style="bold green")
-
-    for exp in explanations:
-        table.add_row(exp.pass_name, exp.domain, exp.description, exp.expected_impact)
-
-    console.print(table)
+    except Exception as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
+        raise typer.Exit(code=1)
 
 
 @app.command()

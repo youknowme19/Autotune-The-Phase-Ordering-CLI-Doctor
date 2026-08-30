@@ -34,6 +34,9 @@ class ComparisonResult(BaseModel):
     summary: str
 
 
+CompareResult = ComparisonResult
+
+
 class LiveComparisonResult(BaseModel):
     source_path: str
     heuristic_speedup: float

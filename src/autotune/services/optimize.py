@@ -42,8 +42,11 @@ class OptimizeResult(BaseModel):
     winning_passes: List[str] = Field(default_factory=list)
     reproducible_command: str = ""
     run_dir: str
-    report_json_path: str
-    report_html_path: str
+    report_json_path: str = ""
+    report_html_path: str = ""
+
+
+OptimizationResult = OptimizeResult
 
 
 class OptimizeService:
