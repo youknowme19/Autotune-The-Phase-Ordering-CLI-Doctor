@@ -1079,7 +1079,8 @@ def bundle(
 
 @app.command()
 def cache(
-    action: str = typer.Argument("status", help="Action: status or clear"),
+    action: str = typer.Argument("status", help="Action: status, clear, export, or import"),
+    archive: Optional[str] = typer.Option(None, "--file", "-f", help="Target tar.gz archive for export or import"),
 ):
     """Inspect or manage the persistent compilation and benchmark result cache."""
     cache_dir = os.path.join(os.getcwd(), ".autotune", "cache")
@@ -1091,6 +1092,29 @@ def cache(
             console.print("[bold green]Persistent benchmark cache successfully cleared.[/bold green]")
         else:
             console.print("[dim]Cache directory is already empty.[/dim]")
+        return
+
+    elif action == "export":
+        import tarfile
+        out_tar = archive or "autotune_cache.tar.gz"
+        if not os.path.exists(cache_dir):
+            console.print("[bold red]No cache directory found to export.[/bold red]")
+            raise typer.Exit(code=1)
+        with tarfile.open(out_tar, "w:gz") as tar:
+            tar.add(cache_dir, arcname="cache")
+        console.print(f"[bold green]✓ Exported team cache bundle to: [cyan]{out_tar}[/cyan][/bold green]")
+        return
+
+    elif action == "import":
+        import tarfile
+        in_tar = archive or "autotune_cache.tar.gz"
+        if not os.path.exists(in_tar):
+            console.print(f"[bold red]Cache archive '{in_tar}' not found.[/bold red]")
+            raise typer.Exit(code=1)
+        os.makedirs(cache_dir, exist_ok=True)
+        with tarfile.open(in_tar, "r:gz") as tar:
+            tar.extractall(path=os.path.dirname(cache_dir))
+        console.print(f"[bold green]✓ Successfully imported team cache bundle from [cyan]{in_tar}[/cyan][/bold green]")
         return
 
     if not os.path.exists(cache_dir):
