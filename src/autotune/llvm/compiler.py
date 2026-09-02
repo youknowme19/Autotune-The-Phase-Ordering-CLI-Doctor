@@ -235,8 +235,9 @@ class CompilerDriver:
         output_binary_path: str,
         extra_flags: Optional[List[str]] = None,
         timeout_seconds: float = 20.0,
+        lto: Optional[str] = None,
     ) -> CompilationResult:
-        """Step 3: Compile optimized bitcode into native machine executable."""
+        """Step 3: Compile optimized bitcode into native machine executable with optional LTO."""
         if not os.path.exists(bitcode_path):
             return CompilationResult(
                 success=False, error_message=f"Bitcode file not found: {bitcode_path}"
@@ -248,6 +249,10 @@ class CompilerDriver:
         cmd = [self.clang_path]
         if platform.system() == "Darwin" and self.target_arch:
             cmd.extend(["-arch", self.target_arch])
+
+        if lto:
+            lto_flag = "-flto=thin" if lto.lower() == "thin" else "-flto"
+            cmd.append(lto_flag)
 
         cmd.extend([os.path.abspath(bitcode_path), "-o", output_bin])
         if extra_flags:
