@@ -173,6 +173,8 @@ class GeneticAlgorithmEngine:
         baseline_time_ns: float,
         output_dir: str,
     ) -> Individual:
+        from autotune.llvm.passes import PassDAGOptimizer
+        individual.sequence = PassDAGOptimizer.prune_redundant_passes(individual.sequence)
         seq_hash = self.get_sequence_hash(individual.sequence)
 
         # 1. Session memory lookup
