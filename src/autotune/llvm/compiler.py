@@ -106,6 +106,11 @@ class CompilerDriver:
             output_bc,
         ]
 
+        # Add modern C++ standard flag if source is C++
+        _, ext = os.path.splitext(source_path)
+        if ext in self.CPP_EXTENSIONS:
+            cmd.insert(1, "-std=c++20")
+
         start_t = time.perf_counter()
         try:
             res = subprocess.run(
