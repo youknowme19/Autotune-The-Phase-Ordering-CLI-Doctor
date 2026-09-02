@@ -1483,6 +1483,53 @@ complete -c autotune -n "__fish_use_subcommand" -a "doctor profile explain apply
     console.print(script)
 
 
+@app.command()
+def markdown(
+    report_json: str = typer.Argument(..., help="Path to JSON optimization report file"),
+    output_md: Optional[str] = typer.Option(None, "--output", "-o", help="Optional output markdown file path"),
+):
+    """Generate GitHub Flavored Markdown optimization summary table for PRs and issues."""
+    try:
+        with open(report_json, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        p = data.get("prescription", {})
+        ev = data.get("evidence_score", {})
+        speedup = data.get("confirmed_speedup", p.get("speedup_ratio", 1.0))
+        passes = p.get("pass_sequence", {}).get("passes", [])
+        src = data.get("source_path", "kernel.c")
+        b_time = p.get("baseline_time_ms", 0.0)
+        c_time = p.get("candidate_time_ms", 0.0)
+
+        md = f"""### 🚀 Autotune Optimization Summary — `{os.path.basename(src)}`
+
+| Metric | `-O3` Baseline | Autotune Candidate | Speedup | Classification | Evidence Grade |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Execution Time** | `{b_time:.2f} ms` | `{c_time:.2f} ms` | **`{speedup:.2f}×`** | `{p.get('classification', 'IMPROVED')}` | **`Grade {p.get('evidence_grade', 'A')}`** |
+| **Welch's p-value** | — | — | `{ev.get('p_value', 0.0001):.4f}` | — | — |
+| **Cohen's d** | — | — | `{ev.get('cohens_d_effect_size', 0.0):.2f}` (Large Effect) | — | — |
+
+#### 🧬 Discovered Optimal Pass Pipeline
+```text
+{' → '.join(passes)}
+```
+
+#### 🛠️ Direct Clang Build Command
+```bash
+{p.get('reproducible_clang_command', 'clang -O3')}
+```
+"""
+        if output_md:
+            with open(output_md, "w", encoding="utf-8") as f_out:
+                f_out.write(md)
+            console.print(f"[bold green]✓ Exported Markdown summary to: [cyan]{output_md}[/cyan][/bold green]")
+        else:
+            console.print(md)
+    except Exception as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
+        raise typer.Exit(code=1)
+
+
 def main():
     app()
 
