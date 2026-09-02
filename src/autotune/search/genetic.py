@@ -224,7 +224,15 @@ class GeneticAlgorithmEngine:
             repetitions=measure_r,
         )
 
-        # A. Check Compilation Cache
+        # A. Fast-fail invalid pass sequences
+        if not individual.sequence or not individual.sequence.passes:
+            individual.compilation_success = False
+            individual.fitness = float("-inf")
+            individual.error_message = "Empty pass pipeline"
+            self.session_eval_cache[seq_hash] = individual
+            return individual
+
+        # B. Check Compilation Cache
         cached_bin = self.cache_mgr.get_compilation(comp_key)
         if cached_bin and os.path.exists(cached_bin):
             cand_bin = cached_bin
