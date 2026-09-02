@@ -862,6 +862,7 @@ def bench_suite(
     seed: Optional[int] = typer.Option(42, "--seed", "-s", help="Random seed for deterministic offline search"),
     fresh_benchmark: bool = typer.Option(False, "--fresh-benchmark", help="Force fresh timing measurements for bench suite"),
     output_report: str = typer.Option("stress_test_report.json", "--output-report", "-o", help="Path to export stress test report JSON"),
+    csv_output: Optional[str] = typer.Option(None, "--csv", help="Optional path to export benchmark results as CSV"),
     workers: int = typer.Option(4, "--workers", help="Number of parallel worker processes"),
 ):
     """Run aggressive batch stress testing across a directory of C/C++ benchmark kernels."""
@@ -880,6 +881,22 @@ def bench_suite(
     )
 
     report = orchestrator.run_suite(suite_dir=suite_dir, output_report_path=output_report)
+
+    if csv_output:
+        import csv
+        with open(csv_output, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Workload", "Baseline_ms", "Candidate_ms", "Speedup", "Status", "Grade"])
+            for res_item in report.individual_results:
+                writer.writerow([
+                    res_item.kernel_name,
+                    round(res_item.baseline_time_ms, 3),
+                    round(res_item.candidate_time_ms, 3),
+                    round(res_item.speedup_ratio, 2),
+                    res_item.status,
+                    res_item.evidence_grade,
+                ])
+        console.print(f"[bold green]✓ Exported CSV benchmark matrix to: [cyan]{csv_output}[/cyan][/bold green]")
 
     console.print(f"\n[bold green]Batch Stress Testing Completed![/bold green]")
     console.print(f"Total Workloads Tested: [bold white]{report.total_workloads}[/bold white]")
