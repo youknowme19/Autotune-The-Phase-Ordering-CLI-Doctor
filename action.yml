@@ -1,0 +1,44 @@
+name: "Autotune Performance Guard Action"
+description: "Automatically optimize and guard C/C++ workloads against performance regressions in CI"
+author: "Autotune Contributors"
+branding:
+  icon: "zap"
+  color: "blue"
+
+inputs:
+  source:
+    description: "Path to C/C++ source kernel to guard"
+    required: true
+  reference:
+    description: "Path to reference report JSON from baseline or previous release"
+    required: true
+  threshold:
+    description: "Allowed regression threshold (default: 0.05 for 5%)"
+    required: false
+    default: "0.05"
+  strict-env:
+    description: "Enforce strict architecture and LLVM toolchain match"
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install Autotune
+      shell: bash
+      run: |
+        pip install autotune-doctor
+
+    - name: Run Autotune Guard
+      shell: bash
+      run: |
+        STRICT_FLAG=""
+        if [ "${{ inputs.strict-env }}" = "true" ]; then
+          STRICT_FLAG="--strict-env"
+        fi
+        autotune guard "${{ inputs.source }}" --reference "${{ inputs.reference }}" --threshold "${{ inputs.threshold }}" $STRICT_FLAG --ci
