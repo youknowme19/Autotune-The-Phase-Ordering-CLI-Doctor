@@ -26,6 +26,8 @@ class InspectionResult(BaseModel):
     candidate_assembly_metrics: AssemblyMetrics
     vector_instruction_gain: int = 0
     instruction_count_delta: int = 0
+    cfg_diagram: str = ""
+    basic_blocks_count: int = 0
 
 
 # Alias for naming consistency
@@ -109,6 +111,8 @@ class InspectService:
             instr_delta = c_metrics.total_instructions - b_metrics.total_instructions
             vec_gain = c_metrics.vector_instructions - b_metrics.vector_instructions
 
+            cfg_art, bb_count = InspectService._build_cfg_ascii(c_ir_text)
+
             return InspectionResult(
                 source_path=source,
                 pass_sequence=passes,
@@ -120,4 +124,44 @@ class InspectService:
                 candidate_assembly_metrics=c_metrics,
                 vector_instruction_gain=vec_gain,
                 instruction_count_delta=instr_delta,
+                cfg_diagram=cfg_art,
+                basic_blocks_count=bb_count,
             )
+
+    @staticmethod
+    def _build_cfg_ascii(llvm_ir: str) -> tuple[str, int]:
+        """Generates an ASCII Control Flow Graph (CFG) from LLVM IR basic blocks."""
+        import re
+        blocks = []
+        current_label = "entry"
+        current_instrs = 0
+
+        for line in llvm_ir.splitlines():
+            line_str = line.strip()
+            if not line_str or line_str.startswith(";"):
+                continue
+            if line_str.endswith(":") and not line_str.startswith(" "):
+                if current_instrs > 0:
+                    blocks.append((current_label, current_instrs))
+                current_label = line_str[:-1]
+                current_instrs = 0
+            else:
+                current_instrs += 1
+
+        if current_instrs > 0:
+            blocks.append((current_label, current_instrs))
+
+        if not blocks:
+            return ("  [entry] (single basic block)", 1)
+
+        cfg_lines = []
+        for i, (label, count) in enumerate(blocks[:8]):
+            box = f"┌── Basic Block: {label} ({count} instrs) ──┐"
+            cfg_lines.append(f"  {box}")
+            if i < len(blocks) - 1 and i < 7:
+                cfg_lines.append("          │")
+                cfg_lines.append("          ▼")
+        if len(blocks) > 8:
+            cfg_lines.append(f"  ... ({len(blocks) - 8} more basic blocks)")
+
+        return ("\n".join(cfg_lines), len(blocks))

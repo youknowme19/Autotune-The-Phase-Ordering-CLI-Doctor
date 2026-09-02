@@ -413,6 +413,7 @@ def inspect(
     source: str = typer.Argument(..., help="Path to C/C++ source kernel file"),
     pipeline: Optional[str] = typer.Option(None, "--pipeline", "-p", help="Pass sequence string to inspect"),
     report: Optional[str] = typer.Option(None, "--report", "-r", help="Path to report JSON to inspect winning pipeline"),
+    show_cfg: bool = typer.Option(False, "--cfg", help="Display ASCII Control Flow Graph of basic blocks"),
 ):
     """Inspect LLVM IR transformations, structural IR diffs, and assembly metrics."""
     try:
@@ -435,6 +436,10 @@ def inspect(
         table.add_row("Code Size (Bytes)", str(b_m.approximate_code_size_bytes), str(c_m.approximate_code_size_bytes), f"{c_m.approximate_code_size_bytes - b_m.approximate_code_size_bytes:+d}")
 
         console.print(table)
+
+        if show_cfg and res.cfg_diagram:
+            console.print(f"\n[bold cyan]Control Flow Graph ({res.basic_blocks_count} Basic Blocks):[/bold cyan]")
+            console.print(Panel(res.cfg_diagram, border_style="blue"))
 
         console.print("\n[bold cyan]LLVM IR Diff Preview (Baseline vs Optimized):[/bold cyan]")
         console.print(Panel(res.ir_diff_preview, border_style="dim"))
