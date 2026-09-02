@@ -227,6 +227,27 @@ autotune config status
 autotune config keyring
 ```
 
+### 11. `autotune init`
+Interactive project initialization wizard. Detects C/C++ targets, generates `.autotune.yml`, and configures `.gitignore`.
+
+```bash
+autotune init
+```
+
+### 12. `autotune markdown`
+Exports GitHub-flavored Markdown summary tables for pull request descriptions and code reviews.
+
+```bash
+autotune markdown .autotune/runs/latest/report.json -o summary.md
+```
+
+### 13. `autotune completion`
+Generates native shell completion scripts for Bash, Zsh, or Fish.
+
+```bash
+autotune completion zsh > ~/.zsh/completion/_autotune
+```
+
 ---
 
 ## 🛡️ Correctness Validation Strategies
