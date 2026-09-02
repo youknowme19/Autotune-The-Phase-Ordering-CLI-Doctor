@@ -1,11 +1,41 @@
-# Security Policy & Execution Model
+# Security Policy
 
-## Reporting Vulnerabilities
-If you discover a security vulnerability in Autotune, please report it securely via [GitHub Security Advisories](https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor/security/advisories).
+## Supported Versions
 
-## Execution Security & Isolation Model
+We actively support security updates for the following versions:
 
-1. **Subprocess Isolation**: Candidate binaries are executed in isolated temporary directories using strict `execve` argument structures (`shell=False`) to prevent command line shell injection vulnerabilities.
-2. **Stream Truncation Caps**: Candidate `stdout` and `stderr` execution streams are capped at **10MB** to prevent unbounded memory amplification or log disk-filling attacks.
-3. **Environment Sanitization**: `EnvironmentFingerprint` captures non-sensitive system metadata (OS, CPU, Clang/Opt versions) and explicitly excludes usernames, home directory paths, and environment secrets.
-4. **Signal & Timeout Safeguards**: Execution timeouts are enforced via POSIX signal handlers (`SIGTERM`, `SIGKILL`) to prevent zombie candidate processes.
+| Version | Supported          |
+| ------- | ------------------ |
+| 0.3.x   | :white_check_mark: |
+| < 0.3.0 | :x:                |
+
+---
+
+## Security Invariants in Autotune
+
+Autotune is designed with strict security invariants for enterprise and research compiler environments:
+
+1. **Zero Secret Leakage**:
+   - LLM API keys configured via `autotune config keyring` or environment variables are stored in the operating system's native secret storage (`Keychain` on macOS, `SecretService` on Linux).
+   - Secret keys are stripped and filtered from all standard output, console panels, JSON reports, HTML artifacts, and generated build scripts.
+2. **Process Sandboxing**:
+   - Candidate executions are run under strict time limits (`--timeout`) and resource constraints to prevent denial-of-service or infinite loops caused by pathological pass combinations.
+3. **Non-Destructive Workflows**:
+   - `autotune apply` and `autotune doctor` generate artifacts into dedicated directories (`.autotune/artifacts/` or specified directories) and **never overwrite or modify original user source files**.
+
+---
+
+## Reporting a Vulnerability
+
+If you discover a security vulnerability in Autotune, please do **NOT** open a public GitHub issue.
+
+Instead, please send a report to:
+`security@autotune.dev`
+
+Please include:
+* Description of the vulnerability.
+* Steps or minimal code snippet to reproduce.
+* Potential impact.
+* Suggested fix (if known).
+
+You will receive an acknowledgment within 48 hours, followed by regular updates until a patch is released.
