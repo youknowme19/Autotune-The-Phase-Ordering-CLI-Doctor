@@ -1376,6 +1376,58 @@ no_llm: false
     console.print("  • Optimize a target: [cyan]autotune doctor <source.c>[/cyan]\n")
 
 
+@app.command()
+def completion(
+    shell: str = typer.Argument("bash", help="Target shell: [bash|zsh|fish]"),
+):
+    """Generate shell autocompletion script for bash, zsh, or fish."""
+    sh = shell.lower().strip()
+    if sh == "bash":
+        script = """# Autotune Bash completion
+_autotune_completion() {
+    local cur prev words cword
+    _init_completion || return
+    local commands="doctor profile explain apply export reproduce guard inspect history init config cache bench-suite runs diagnose search"
+    if [[ $cword -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "$commands" -- "$cur") )
+        return
+    fi
+}
+complete -F _autotune_completion autotune
+"""
+    elif sh == "zsh":
+        script = """#compdef autotune
+# Autotune Zsh completion
+_autotune() {
+    local -a commands
+    commands=(
+        'doctor:Analyze workload, search optimal pass pipelines, and validate'
+        'profile:Extract structural AST features and loop/memory metrics'
+        'explain:Deconstruct compiler optimization mechanics'
+        'apply:Generate production compiler artifacts (.ll, .s, .bin)'
+        'export:Export build recipes in JSON, Shell, CMake, or Make format'
+        'reproduce:Re-benchmark previous optimization reports'
+        'guard:Continuous integration performance regression gate'
+        'inspect:Inspect LLVM IR diffs and assembly metrics'
+        'history:Query past optimization runs'
+        'init:Initialize project with .autotune.yml configuration'
+    )
+    _describe -t commands 'autotune commands' commands
+}
+_autotune "$@"
+"""
+    elif sh == "fish":
+        script = """# Autotune Fish completion
+complete -c autotune -f
+complete -c autotune -n "__fish_use_subcommand" -a "doctor profile explain apply export reproduce guard inspect history init"
+"""
+    else:
+        console.print(f"[bold red]Unsupported shell '{shell}'. Supported shells: bash, zsh, fish[/bold red]")
+        raise typer.Exit(code=1)
+
+    console.print(script)
+
+
 def main():
     app()
 
