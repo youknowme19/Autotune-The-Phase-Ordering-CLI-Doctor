@@ -174,3 +174,41 @@ class PassValidator:
             if self.is_valid_pass(p)
         ]
         return PassSequence(passes=valid_only)
+
+
+class PassDAGOptimizer:
+    """
+    Intelligent Pass Pipeline Dependency and Redundancy Pruning.
+    Eliminates redundant adjacent idempotent passes (e.g. repeated mem2reg without intermediary mutation)
+    and resolves pass conflicts to maximize compiler throughput and search efficacy.
+    """
+
+    # Passes that are strictly idempotent when run consecutively without mutations
+    IDEMPOTENT_CONSECUTIVE_PASSES: Set[str] = {
+        "mem2reg",
+        "sroa",
+        "dce",
+        "adce",
+        "loop-simplify",
+        "simplifycfg",
+        "lower-atomic",
+    }
+
+    @classmethod
+    def prune_redundant_passes(cls, sequence: PassSequence) -> PassSequence:
+        """Prunes contiguous identical idempotent passes in a pass pipeline."""
+        if not sequence.passes or len(sequence.passes) <= 1:
+            return sequence
+
+        pruned: List[str] = []
+        prev: Optional[str] = None
+
+        for p in sequence.passes:
+            norm_p = CanonicalPassNormalizer.canonicalize_pass_name(p)
+            if prev is not None and norm_p == prev and norm_p in cls.IDEMPOTENT_CONSECUTIVE_PASSES:
+                # Skip consecutive duplicate idempotent pass
+                continue
+            pruned.append(norm_p)
+            prev = norm_p
+
+        return PassSequence(passes=pruned)
