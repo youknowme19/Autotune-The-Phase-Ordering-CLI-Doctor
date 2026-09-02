@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "autotune-doctor"
-version = "0.3.0"
+version = "0.4.0"
 description = "AI-guided compiler optimization and LLVM phase-ordering doctor for C/C++ workloads"
 readme = "README.md"
 authors = [
