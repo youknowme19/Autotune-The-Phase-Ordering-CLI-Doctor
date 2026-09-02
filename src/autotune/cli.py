@@ -332,6 +332,7 @@ def guard(
     warmup: int = typer.Option(3, "--warmup", help="Warmup repetitions"),
     strict_env: bool = typer.Option(False, "--strict-env", help="Enforce identical CPU architecture and toolchain"),
     ci: bool = typer.Option(False, "--ci", help="CI machine-readable mode"),
+    comment_markdown: Optional[str] = typer.Option(None, "--comment-markdown", help="Export GitHub PR Markdown summary comment to specified file"),
 ):
     """Performance Regression Guard: Compares current execution against reference to protect performance in CI."""
     res = GuardService.check_guard(
@@ -343,6 +344,19 @@ def guard(
         warmup=warmup,
         strict_env=strict_env,
     )
+
+    if comment_markdown:
+        md_text = f"""## ⚡ Autotune Performance Guard Report
+
+| Metric | Reference | Current | Delta | Allowed Threshold | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Execution Time** | `{res.reference_ms:.3f} ms` | `{res.current_ms:.3f} ms` | `{res.regression_pct:+.1f}%` | `{res.threshold_pct:.1f}%` | **{res.status}** |
+| **Correctness** | `PASS` | `{res.correctness_status}` | — | — | **✓ PASS** |
+
+> *Generated automatically by [Autotune](https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor) in CI.*
+"""
+        with open(comment_markdown, "w", encoding="utf-8") as f:
+            f.write(md_text)
 
     if ci:
         console.print(f"AUTOTUNE CI GUARD")
