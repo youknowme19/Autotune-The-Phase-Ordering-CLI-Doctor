@@ -447,10 +447,16 @@ class HTMLReportGenerator:
         <div class="card" style="margin-bottom: 24px;">
             <h2>Reproducibility & Execution Commands</h2>
             <p><strong>To reproduce this exact experiment in Autotune:</strong></p>
-            <pre>autotune reproduce {run_id}/report.json</pre>
+            <div style="position: relative;">
+                <pre id="cmd-reproduce">autotune reproduce {run_id}/report.json</pre>
+                <button onclick="navigator.clipboard.writeText(document.getElementById('cmd-reproduce').innerText); this.innerText='Copied!';" style="position: absolute; right: 12px; top: 12px; background: #334155; color: #f8fafc; border: 1px solid #475569; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 0.8rem;">Copy</button>
+            </div>
 
             <p><strong>To build the optimized binary directly with Clang:</strong></p>
-            <pre>{clang_cmd}</pre>
+            <div style="position: relative;">
+                <pre id="cmd-clang">{clang_cmd}</pre>
+                <button onclick="navigator.clipboard.writeText(document.getElementById('cmd-clang').innerText); this.innerText='Copied!';" style="position: absolute; right: 12px; top: 12px; background: #334155; color: #f8fafc; border: 1px solid #475569; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 0.8rem;">Copy</button>
+            </div>
         </div>
 
         <div class="card">
@@ -461,7 +467,7 @@ class HTMLReportGenerator:
                     <tr><td><strong>Target Triple</strong></td><td>{triple}</td></tr>
                     <tr><td><strong>Clang Compiler</strong></td><td>{clang_ver}</td></tr>
                     <tr><td><strong>LLVM Opt Binary</strong></td><td>{opt_ver}</td></tr>
-                    <tr><td><strong>Autotune Version</strong></td><td>v0.3.0</td></tr>
+                    <tr><td><strong>Autotune Version</strong></td><td>v0.4.0 (Enterprise Open-Source Edition)</td></tr>
                 </tbody>
             </table>
         </div>
