@@ -157,11 +157,66 @@ Reproducible Compiler Command:
 {clang_cmd}
 """
 
+        ninja_content = f"""# ==============================================================================
+# Autotune Ninja Build Rules
+# Experiment ID: {run_id} | Source: {source_name} | Speedup: {speedup:.2f}x
+# ==============================================================================
+ninja_required_version = 1.10
+
+clang = {clang_bin}
+opt = {opt_bin}
+passes = {passes_str}
+
+rule emit_bc
+  command = $clang -O0 -Xclang -disable-O0-optnone -emit-llvm -c $in -o $out
+  description = Autotune: Compiling $in to raw bitcode
+
+rule optimize_bc
+  command = $opt -passes=$passes $in -o $out
+  description = Autotune: Optimizing $in with ($passes)
+
+rule link_bin
+  command = $clang $in -o $out
+  description = Autotune: Linking native binary $out
+
+build {stem}.raw.bc: emit_bc {source}
+build {stem}.opt.bc: optimize_bc {stem}.raw.bc
+build {stem}.opt.bin: link_bin {stem}.opt.bc
+
+default {stem}.opt.bin
+"""
+
+        meson_content = f"""# ==============================================================================
+# Autotune Meson Build Definition
+# Experiment ID: {run_id} | Source: {source_name} | Speedup: {speedup:.2f}x
+# ==============================================================================
+project('autotune-{stem}', 'c', version: '0.4.0')
+
+clang = find_program('clang')
+opt = find_program('opt')
+
+raw_bc = custom_target('{stem}_raw_bc',
+  input: '{source}',
+  output: '{stem}.raw.bc',
+  command: [clang, '-O0', '-Xclang', '-disable-O0-optnone', '-emit-llvm', '-c', '@INPUT@', '-o', '@OUTPUT@']
+)
+
+opt_bc = custom_target('{stem}_opt_bc',
+  input: raw_bc,
+  output: '{stem}.opt.bc',
+  command: [opt, '-passes={passes_str}', '@INPUT@', '-o', '@OUTPUT@']
+)
+
+executable('{stem}.opt.bin', opt_bc)
+"""
+
         format_map = {
             "json": json_content,
             "shell": shell_content,
             "cmake": cmake_content,
             "make": make_content,
+            "ninja": ninja_content,
+            "meson": meson_content,
         }
 
         content = format_map.get(fmt, json_content)
