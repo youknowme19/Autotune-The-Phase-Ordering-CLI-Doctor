@@ -145,7 +145,9 @@ def doctor(
         if not quiet and not ci:
             spd = f"{stats.speedup_factor:.2f}x" if stats.speedup_factor else "1.00x"
             best_ms = f"{stats.best_fitness_ns / 1e6:.3f} ms" if stats.best_fitness_ns else "N/A"
-            console.print(f"  [dim]Generation {stats.generation}/{stats.total_generations}[/dim] | Best: [bold green]{best_ms}[/bold green] | Speedup: [bold magenta]{spd}[/bold magenta] | Valid: [cyan]{stats.valid_candidates_count}[/cyan]")
+            pct = int((stats.generation / max(stats.total_generations, 1)) * 20)
+            bar = "━" * pct + "╸" + "─" * max(0, 19 - pct)
+            console.print(f"  [cyan]Gen {stats.generation:02d}/{stats.total_generations:02d}[/cyan] [bold blue][{bar}][/bold blue] | Best: [bold green]{best_ms:>10}[/bold green] | Gain: [bold magenta]{spd:>6}[/bold magenta] | Diversity: [dim]{stats.diversity_ratio:.2f}[/dim] | Valid: [cyan]{stats.valid_candidates_count}[/cyan]")
         elif ci:
             console.print(f"[CI] Gen {stats.generation}/{stats.total_generations} | Best: {stats.best_fitness_ns / 1e6 if stats.best_fitness_ns else 0.0:.2f}ms")
 
