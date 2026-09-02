@@ -46,6 +46,8 @@ class ExecutionMetrics(BaseModel):
     ci95_upper_time_ns: Optional[float] = None  # 95% CI upper bound
     cycles: Optional[int] = None
     instructions: Optional[int] = None
+    peak_memory_kb: Optional[int] = None  # Peak resident set size in KB
+    allocations_count: Optional[int] = None  # Tracked heap allocation count
 
 
 class BenchmarkResult(BaseModel):
