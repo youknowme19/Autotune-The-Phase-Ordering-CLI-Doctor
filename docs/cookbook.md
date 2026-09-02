@@ -109,5 +109,43 @@ autotune doctor src/kernel.c --no-llm --preset aggressive
 To stress-test and batch-optimize an entire directory of benchmark kernels (e.g. PolyBench or internal kernels):
 
 ```bash
-autotune bench-suite ./benchmarks/ --population 20 --generations 10 --workers 4 -o stress_report.json
+autotune bench-suite ./benchmarks/ --population 20 --generations 10 --workers 4 --csv benchmark_matrix.csv -o stress_report.json
+```
+
+---
+
+## Recipe 7: Automated GitHub PR Benchmark Commenting
+
+Add automated PR comments with beautiful markdown summary tables:
+
+```yaml
+- name: Guard and Comment
+  run: |
+    autotune guard src/hotspot.c --reference .autotune/ref.json --comment-markdown pr_comment.md
+- name: Post Comment to PR
+  uses: actions/github-script@v7
+  with:
+    script: |
+      const fs = require('fs');
+      const body = fs.readFileSync('pr_comment.md', 'utf8');
+      github.rest.issues.createComment({
+        issue_number: context.issue.number,
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        body: body
+      });
+```
+
+---
+
+## Recipe 8: Meson and Ninja Build System Export
+
+Export native build files for Ninja and Meson projects:
+
+```bash
+# Export Ninja build rules
+autotune export report.json --format ninja -o build.ninja
+
+# Export Meson build definition
+autotune export report.json --format meson -o meson.build
 ```
