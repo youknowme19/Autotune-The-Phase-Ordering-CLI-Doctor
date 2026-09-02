@@ -1297,6 +1297,85 @@ def runs_clean():
         console.print("[dim]No runs directory to clean.[/dim]")
 
 
+@app.command()
+def init(
+    target_dir: str = typer.Option(".", "--dir", "-d", help="Project directory to initialize"),
+    force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing configuration"),
+):
+    """Initialize Autotune in a C/C++ project directory with configuration and CI templates."""
+    console.print(Panel(
+        "[bold cyan]AUTOTUNE PROJECT INITIALIZATION WIZARD[/bold cyan]\n"
+        "[dim]Setting up intelligent phase-ordering for your project[/dim]",
+        border_style="cyan",
+        expand=False,
+    ))
+
+    t_dir = os.path.abspath(target_dir)
+    cfg_file = os.path.join(t_dir, ".autotune.yml")
+    dot_auto = os.path.join(t_dir, ".autotune")
+    os.makedirs(dot_auto, exist_ok=True)
+
+    # Scan for C/C++ files
+    c_files = []
+    for root, _, files in os.walk(t_dir):
+        if ".git" in root or ".autotune" in root:
+            continue
+        for f in files:
+            if f.endswith((".c", ".cpp", ".cc", ".cxx", ".h", ".hpp")):
+                c_files.append(os.path.relpath(os.path.join(root, f), t_dir))
+
+    console.print(f"Scanning directory: [cyan]{t_dir}[/cyan]")
+    console.print(f"Found [bold green]{len(c_files)}[/bold green] C/C++ source files in project.")
+
+    if os.path.exists(cfg_file) and not force:
+        console.print(f"[yellow]Configuration file already exists: {cfg_file} (use --force to overwrite)[/yellow]")
+    else:
+        sample_target = c_files[0] if c_files else "src/main.c"
+        cfg_content = f"""# Autotune Project Configuration
+version: "0.4"
+
+# Default optimization preset: quick, balanced, or aggressive
+preset: "balanced"
+
+# Evaluation parameters
+runs: 7
+warmup: 2
+seed: 42
+
+# Primary targets for automated performance guarding
+targets:
+  - path: "{sample_target}"
+    threshold: 0.05
+    strict_env: false
+
+# Cache settings
+cache:
+  enabled: true
+  directory: ".autotune/cache"
+
+# Offline mode (set to true for air-gapped CI environments)
+no_llm: false
+"""
+        with open(cfg_file, "w", encoding="utf-8") as f:
+            f.write(cfg_content)
+        console.print(f"✓ Created configuration: [bold green]{cfg_file}[/bold green]")
+
+    # Create gitignore entry if needed
+    gi_path = os.path.join(t_dir, ".gitignore")
+    if os.path.exists(gi_path):
+        with open(gi_path, "r", encoding="utf-8") as f:
+            gi_content = f.read()
+        if ".autotune" not in gi_content:
+            with open(gi_path, "a", encoding="utf-8") as f:
+                f.write("\n# Autotune artifacts and cache\n.autotune/\n*.opt.bin\n*.opt.bc\n*.raw.bc\n")
+            console.print("✓ Appended `.autotune/` to [bold green].gitignore[/bold green]")
+
+    console.print("\n[bold green]✓ Autotune project initialization complete![/bold green]")
+    console.print("Next steps:")
+    console.print("  • Profile a hotspot: [cyan]autotune profile <source.c>[/cyan]")
+    console.print("  • Optimize a target: [cyan]autotune doctor <source.c>[/cyan]\n")
+
+
 def main():
     app()
 
