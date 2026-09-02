@@ -1,0 +1,25 @@
+name: "✨ Feature / Pass Heuristic Proposal"
+description: "Suggest an improvement, new pass sequence heuristic, or workflow enhancement"
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Motivation
+      description: Is your feature request related to a specific optimization challenge or compiler limitation?
+      placeholder: "e.g. When optimizing matrix convolution, loop-interchange is rarely explored..."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution / Pass Heuristic
+      description: Detailed description of the feature or pass transformation rule you want to see.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative solutions or features you considered.

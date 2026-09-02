@@ -1,0 +1,29 @@
+name: "📊 Benchmark / Kernel Submission"
+description: "Submit a new benchmark kernel, PolyBench result, or speedup reproduction data"
+title: "[Benchmark]: "
+labels: ["benchmark", "reproducibility"]
+body:
+  - type: textarea
+    id: workload
+    attributes:
+      label: Workload Description
+      description: What numerical algorithm or computation does this kernel execute?
+    validations:
+      required: true
+  - type: textarea
+    id: metrics
+    attributes:
+      label: Speedup & Statistical Findings
+      placeholder: |
+        - Baseline (-O3) time: XX.X ms
+        - Autotune Candidate time: XX.X ms
+        - Speedup ratio: X.XX×
+        - Evidence Grade: Grade A / B
+        - p-value: < 0.001, Cohen's d: X.XX
+    validations:
+      required: true
+  - type: textarea
+    id: sequence
+    attributes:
+      label: Winning Pass Pipeline
+      placeholder: "e.g. sccp -> gvn -> mem2reg -> lower-atomic -> mem2reg"

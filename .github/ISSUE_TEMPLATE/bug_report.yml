@@ -1,0 +1,41 @@
+name: "🐛 Bug Report"
+description: "Report an issue, compiler failure, or incorrect optimization behavior"
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue with Autotune! Please provide clear reproduction steps.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description of the Problem
+      description: What unexpected behavior did you observe?
+      placeholder: "e.g. autotune doctor crashed during pass pipeline validation..."
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact Command Executed
+      description: The exact command line invoked.
+      placeholder: "autotune doctor my_kernel.c --preset balanced"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment & Toolchain Details
+      description: Output of `autotune doctor` or your OS / LLVM version.
+      placeholder: |
+        OS: macOS 15.1 / Ubuntu 24.04
+        LLVM Version: clang version 17.0.6
+        Architecture: Apple Silicon M3 / x86_64
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs or Error Traceback
+      render: shell
