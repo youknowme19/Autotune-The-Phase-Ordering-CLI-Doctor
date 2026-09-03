@@ -55,3 +55,14 @@ class Individual(BaseModel):
 
         # Fallback to lower time ns
         return (self.raw_time_ns or self.fitness or float("inf")) < (other.raw_time_ns or other.fitness or float("inf"))
+
+    def similarity_to(self, other: "Individual") -> float:
+        """Calculate Jaccard similarity coefficient of pass sequences [0.0 - 1.0]."""
+        s1 = set(self.sequence.passes) if self.sequence else set()
+        s2 = set(other.sequence.passes) if other.sequence else set()
+        if not s1 and not s2:
+            return 1.0
+        union = s1.union(s2)
+        if not union:
+            return 0.0
+        return len(s1.intersection(s2)) / len(union)
