@@ -1122,6 +1122,17 @@ def cache(
             console.print("[dim]Cache directory is already empty.[/dim]")
         return
 
+    elif action == "clear-benchmarks":
+        perf_dir = os.path.join(cache_dir, "performance")
+        if os.path.exists(perf_dir):
+            import shutil
+            shutil.rmtree(perf_dir)
+            os.makedirs(perf_dir, exist_ok=True)
+            console.print("[bold green]✓ Benchmark timing cache cleared (compilation bitcodes preserved).[/bold green]")
+        else:
+            console.print("[dim]No benchmark timing cache found.[/dim]")
+        return
+
     elif action == "export":
         import tarfile
         out_tar = archive or "autotune_cache.tar.gz"
