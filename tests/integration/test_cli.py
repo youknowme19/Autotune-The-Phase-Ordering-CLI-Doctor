@@ -55,3 +55,26 @@ def test_cli_diagnose_failing_binary_error_propagation(tmp_path):
     assert "Warmup execution failed" in result.stdout
     assert "None" not in result.stdout
     assert "non-zero return code" in result.stdout or "exited" in result.stdout
+
+
+def test_cli_version_subcommand():
+    from autotune import __version__
+    result = runner.invoke(app, ["version"])
+    assert result.exit_code == 0
+    assert "Autotune System & Toolchain Diagnostics" in result.stdout
+    assert __version__ in result.stdout
+
+
+def test_cli_version_json():
+    import json
+    result = runner.invoke(app, ["version", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert "autotune_version" in data
+    assert "python_version" in data
+
+
+def test_cli_history_markdown():
+    result = runner.invoke(app, ["history", "--markdown"])
+    assert result.exit_code == 0
+    assert "Autotune Optimization History" in result.stdout or "Run ID" in result.stdout
