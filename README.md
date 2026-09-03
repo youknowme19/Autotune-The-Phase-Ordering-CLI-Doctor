@@ -241,7 +241,22 @@ Exports GitHub-flavored Markdown summary tables for pull request descriptions an
 autotune markdown .autotune/runs/latest/report.json -o summary.md
 ```
 
-### 13. `autotune completion`
+### 13. `autotune version`
+Displays comprehensive toolchain, compiler versions, CPU architecture, target triple, and timing calibration diagnostics.
+
+```bash
+autotune version
+autotune version --json
+```
+
+### 14. `autotune diff`
+Side-by-side comparison and delta analysis of two JSON optimization search reports.
+
+```bash
+autotune diff report_a.json report_b.json
+```
+
+### 15. `autotune completion`
 Generates native shell completion scripts for Bash, Zsh, or Fish.
 
 ```bash
