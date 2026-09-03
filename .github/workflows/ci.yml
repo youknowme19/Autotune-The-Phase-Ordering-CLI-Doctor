@@ -60,11 +60,22 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang llvm llvm-dev
+          for ver in 19 18 17 16 15 14; do
+            if [ -d "/usr/lib/llvm-$ver/bin" ]; then
+              echo "/usr/lib/llvm-$ver/bin" >> $GITHUB_PATH
+            fi
+          done
 
       - name: Install LLVM / Clang (macOS)
         if: runner.os == 'macOS'
         run: |
-          which clang || brew install llvm
+          which opt || brew install llvm || true
+          if [ -d "/opt/homebrew/opt/llvm/bin" ]; then
+            echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
+          fi
+          if [ -d "/usr/local/opt/llvm/bin" ]; then
+            echo "/usr/local/opt/llvm/bin" >> $GITHUB_PATH
+          fi
 
       - name: Install Autotune package
         run: |
