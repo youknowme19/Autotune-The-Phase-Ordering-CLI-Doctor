@@ -116,6 +116,7 @@ def doctor(
     ci: bool = typer.Option(False, "--ci", help="CI/CD automated non-interactive execution mode"),
     output_json: Optional[str] = typer.Option(None, "--output-json", "-o", help="Path to export JSON report"),
     output_html: Optional[str] = typer.Option(None, "--output-html", help="Path to export HTML report"),
+    export_sh: Optional[str] = typer.Option(None, "--export-sh", help="Path to export executable shell script"),
     output_dir: Optional[str] = typer.Option(None, "--output-dir", help="Output directory for experiment artifacts"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Quiet output mode for logs"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose debug logging"),
@@ -212,6 +213,11 @@ def doctor(
             console.print(f"Artifacts:")
             console.print(f"  - JSON Report: [cyan]{res.report_json_path}[/cyan]")
             console.print(f"  - HTML Report: [cyan]{res.report_html_path}[/cyan]")
+
+            if export_sh and res.report_json_path:
+                ExportService.export_reproduction_artifacts(res.report_json_path, fmt="shell", output_path=export_sh)
+                console.print(f"  - Shell Script: [cyan]{export_sh}[/cyan]")
+
             console.print(f"\nReproduce:")
             console.print(f"  [bold white]autotune reproduce {res.report_json_path}[/bold white]\n")
 
