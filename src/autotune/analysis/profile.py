@@ -78,6 +78,15 @@ class WorkloadProfiler:
         if summary.function_count > 1 or summary.call_count > 0:
             rec_passes.extend(["inline", "simplifycfg"])
 
+        # Target Architecture SIMD & Vector tuning
+        arch_norm = architecture.lower()
+        if "arm" in arch_norm or "aarch" in arch_norm:
+            if summary.loop_count > 0 and (summary.float_ops > 0 or summary.int_ops > 0):
+                rec_passes.extend(["loop-vectorize", "slp-vectorize", "licm"])
+        elif "x86" in arch_norm or "amd" in arch_norm:
+            if summary.loop_count > 0:
+                rec_passes.extend(["loop-vectorize", "slp-vectorize", "early-cse", "dce"])
+
         # Deduplicate recommendations preserving order
         unique_recs: List[str] = []
         for p in rec_passes:
