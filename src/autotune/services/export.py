@@ -210,6 +210,35 @@ opt_bc = custom_target('{stem}_opt_bc',
 executable('{stem}.opt.bin', opt_bc)
 """
 
+        bazel_content = f"""# ==============================================================================
+# Autotune Bazel BUILD Definition
+# Experiment ID: {run_id} | Source: {source_name} | Speedup: {speedup:.2f}x
+# ==============================================================================
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+genrule(
+    name = "{stem}_raw_bc",
+    srcs = ["{source}"],
+    outs = ["{stem}.raw.bc"],
+    cmd = "{clang_bin} -O0 -Xclang -disable-O0-optnone -emit-llvm -c $(location {source}) -o $@",
+)
+
+genrule(
+    name = "{stem}_opt_bc",
+    srcs = [":{stem}_raw_bc"],
+    outs = ["{stem}.opt.bc"],
+    cmd = "{opt_bin} -passes='{passes_str}' $(location :{stem}_raw_bc) -o $@",
+)
+
+genrule(
+    name = "{stem}_opt_bin",
+    srcs = [":{stem}_opt_bc"],
+    outs = ["{stem}.opt.bin"],
+    cmd = "{clang_bin} $(location :{stem}_opt_bc) -o $@",
+    executable = True,
+)
+"""
+
         format_map = {
             "json": json_content,
             "shell": shell_content,
@@ -217,12 +246,13 @@ executable('{stem}.opt.bin', opt_bc)
             "make": make_content,
             "ninja": ninja_content,
             "meson": meson_content,
+            "bazel": bazel_content,
         }
 
         content = format_map.get(fmt, json_content)
 
         if output_path:
-            is_file_path = any(output_path.endswith(ext) for ext in [".json", ".sh", ".cmake", ".make", ".txt", ".mk"])
+            is_file_path = any(output_path.endswith(ext) for ext in [".json", ".sh", ".cmake", ".make", ".txt", ".mk", ".bazel", "BUILD"])
             
             if is_file_path:
                 os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
