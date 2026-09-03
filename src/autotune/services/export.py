@@ -239,6 +239,32 @@ genrule(
 )
 """
 
+        docker_content = f"""# ==============================================================================
+# Autotune Hermetic Reproducibility Container
+# Workload: {source_name} | Discovered Speedup: {speedup:.2f}x
+# ==============================================================================
+FROM ubuntu:22.04
+
+RUN apt-get update && apt-get install -y \\
+    clang \\
+    llvm \\
+    llvm-dev \\
+    python3 \\
+    python3-pip \\
+    time \\
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+COPY . /workspace
+
+# Compile with Autotune Discovered LLVM Phase Pipeline:
+RUN clang -O0 -Xclang -disable-O0-optnone -emit-llvm -c {source} -o {stem}.raw.bc
+RUN opt -passes='{passes_str}' {stem}.raw.bc -o {stem}.opt.bc
+RUN clang {stem}.opt.bc -o {stem}.opt.bin
+
+CMD ["./{stem}.opt.bin"]
+"""
+
         format_map = {
             "json": json_content,
             "shell": shell_content,
@@ -247,12 +273,13 @@ genrule(
             "ninja": ninja_content,
             "meson": meson_content,
             "bazel": bazel_content,
+            "docker": docker_content,
         }
 
         content = format_map.get(fmt, json_content)
 
         if output_path:
-            is_file_path = any(output_path.endswith(ext) for ext in [".json", ".sh", ".cmake", ".make", ".txt", ".mk", ".bazel", "BUILD"])
+            is_file_path = any(output_path.endswith(ext) for ext in [".json", ".sh", ".cmake", ".make", ".txt", ".mk", ".bazel", "BUILD", "Dockerfile"])
             
             if is_file_path:
                 os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
