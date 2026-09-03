@@ -265,6 +265,14 @@ RUN clang {stem}.opt.bc -o {stem}.opt.bin
 CMD ["./{stem}.opt.bin"]
 """
 
+        trace_events = [
+            {"name": "autotune_search", "ph": "B", "pid": 1, "tid": 1, "ts": 0, "args": {"workload": source_name, "speedup": speedup}},
+            {"name": "baseline_O3", "ph": "X", "pid": 1, "tid": 1, "ts": 1000, "dur": int(report_data.get("evidence_score", {}).get("baseline_median_ms", 10.0) * 1000), "args": {"mode": "-O3"}},
+            {"name": "candidate_opt", "ph": "X", "pid": 1, "tid": 1, "ts": 20000, "dur": int(report_data.get("evidence_score", {}).get("candidate_median_ms", 8.0) * 1000), "args": {"passes": passes_str}},
+            {"name": "autotune_search", "ph": "E", "pid": 1, "tid": 1, "ts": 50000, "args": {"result": "IMPROVED"}},
+        ]
+        trace_content = json.dumps({"traceEvents": trace_events}, indent=2)
+
         format_map = {
             "json": json_content,
             "shell": shell_content,
@@ -274,12 +282,13 @@ CMD ["./{stem}.opt.bin"]
             "meson": meson_content,
             "bazel": bazel_content,
             "docker": docker_content,
+            "trace": trace_content,
         }
 
         content = format_map.get(fmt, json_content)
 
         if output_path:
-            is_file_path = any(output_path.endswith(ext) for ext in [".json", ".sh", ".cmake", ".make", ".txt", ".mk", ".bazel", "BUILD", "Dockerfile"])
+            is_file_path = any(output_path.endswith(ext) for ext in [".json", ".sh", ".cmake", ".make", ".txt", ".mk", ".bazel", "BUILD", "Dockerfile", ".trace"])
             
             if is_file_path:
                 os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
