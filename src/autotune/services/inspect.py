@@ -150,9 +150,12 @@ class InspectService:
         if not blocks:
             return ("  [entry] (single basic block)", 1)
 
+        max_instrs = max(b[1] for b in blocks) or 1
         cfg_lines = []
         for i, (label, count) in enumerate(blocks[:8]):
-            box = f"┌── Basic Block: {label} ({count} instrs) ──┐"
+            bar_len = min(12, max(1, int(count / max_instrs * 12)))
+            bar = "█" * bar_len + "░" * (12 - bar_len)
+            box = f"┌── Basic Block: {label} [{bar}] ({count} instrs) ──┐"
             cfg_lines.append(f"  {box}")
             if i < len(blocks) - 1 and i < 7:
                 cfg_lines.append("          │")
