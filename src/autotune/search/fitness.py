@@ -44,7 +44,10 @@ class FitnessEvaluator:
 
             if baseline_time_ns and baseline_time_ns > 0:
                 individual.normalized_speed = round(baseline_time_ns / max(cand_time, 1.0), 4)
-                individual.fitness = individual.normalized_speed
+                # Parsimony pressure: prefer shorter pass sequences when speedup is tied (Occam's razor)
+                pass_count = len(individual.sequence.passes) if individual.sequence else 0
+                length_penalty = (pass_count * 1e-5)
+                individual.fitness = individual.normalized_speed - length_penalty
             else:
                 individual.fitness = cand_time
                 individual.normalized_speed = 1.0
