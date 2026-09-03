@@ -147,6 +147,7 @@ class MacOSPerformanceRunner(PerformanceRunner):
             iqr_noise_ratio=iqr_ratio,
             ci95_lower_time_ns=ci95_lower,
             ci95_upper_time_ns=ci95_upper,
+            peak_memory_kb=res.peak_memory_kb if "res" in locals() else None,
         )
 
         metadata = BenchmarkEnvironmentMetadata(

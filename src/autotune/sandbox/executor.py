@@ -19,6 +19,7 @@ class SandboxExecutionResult(BaseModel):
     exit_code: int = 0
     timed_out: bool = False
     error_message: Optional[str] = None
+    peak_memory_kb: Optional[int] = None
 
 
 class SandboxExecutor:
@@ -101,6 +102,14 @@ class SandboxExecutor:
                 if stderr and stderr.strip():
                     err_msg += f" Stderr: {stderr.strip()[:1000]}"
 
+            peak_mem = None
+            try:
+                import resource
+                rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
+                peak_mem = int(rusage.ru_maxrss // 1024) if hasattr(rusage, "ru_maxrss") else None
+            except Exception:
+                pass
+
             return SandboxExecutionResult(
                 success=(proc.returncode == 0),
                 stdout=stdout or "",
@@ -108,6 +117,7 @@ class SandboxExecutor:
                 exit_code=proc.returncode,
                 timed_out=False,
                 error_message=err_msg,
+                peak_memory_kb=peak_mem,
             )
 
         except subprocess.TimeoutExpired:
