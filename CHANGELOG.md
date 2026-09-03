@@ -5,6 +5,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.5.0] - 2026-09-03 — Compiler Intelligence & Integration Release
+
+### Added
+- **Toolchain Diagnostics & System Matrix**: Added `autotune version` command and `--json` export displaying platform, compiler, target triple, and timing calibration status.
+- **Side-by-Side Experiment Diffing**: Added `autotune diff <report_a> <report_b>` command for comparative delta analysis of search runs.
+- **Graphviz DOT Control Flow Graph**: Added `--export-dot` to `autotune inspect` for exporting basic block flowcharts into Graphviz DOT format.
+- **Basic Block Heatmap Visualization**: Added instruction density bars (`████░░░░`) inside ASCII CFG terminal inspection.
+- **Simulated Annealing Mutation Scheduling**: Integrated adaptive temperature decay into GA mutation rate schedule for balanced exploration and exploitation.
+- **Selection Pressure & Rank Selection**: Added probabilistic selection pressure and rank-proportional selection operators in `Selector`.
+- **Occam Parsimony Penalty**: Applied subtle pipeline length penalty in `FitnessEvaluator` to favor simpler, cleaner pass sequences.
+- **Google Bazel Build Exporter**: Added native Bazel `genrule` export format to `autotune export --format bazel`.
+- **Hermetic Dockerfile Container Export**: Added Dockerfile generator to `autotune export --format docker` for containerized benchmarking.
+- **Chrome Tracing / Perfetto Event Traces**: Added event trace export in `autotune export --format trace`.
+- **Benchmark Kernels Suite Expansion**: Added 4 new high-performance benchmark kernels:
+  - BLAS-2 Dense Matrix-Vector Multiplication (`examples/gemv/kernel.c`)
+  - Cooley-Tukey Radix-2 Fast Fourier Transform (`examples/fft/kernel.c`)
+  - N-Body Gravitational Simulation (`examples/nbody/kernel.c`)
+  - Compressed Sparse Row Matrix-Vector Multiplication (`examples/spmv/kernel.c`)
+- **Peak Resident Memory (RSS) Tracking**: Integrated `ru_maxrss` child process memory tracking in `SandboxExecutor` and `PerformanceRunner`.
+- **LRU Cache Quota & Selective Invalidation**: Added `enforce_lru_quota()` and `autotune cache clear-benchmarks` to selectively clear timing without losing bitcodes.
+- **Jaccard Sequence Similarity Metric**: Added `similarity_to()` to `Individual` candidate model for provenance tracking.
+- **Markdown History Export**: Added `autotune history --markdown` table output.
+- **Automated Shell Benchmark Exporter**: Added `--export-sh` flag to `autotune doctor`.
+
+### Changed
+- **CI/CD Reliability**: Added multi-version LLVM search paths and GITHUB_PATH exports for Ubuntu and macOS runners.
+- **Statistical Significance Guarding**: Added `--min-samples` threshold enforcement in `autotune guard`.
+
+---
+
 ## [0.4.0] - 2026-09-02 — Enterprise Open-Source Edition
 
 ### Added
