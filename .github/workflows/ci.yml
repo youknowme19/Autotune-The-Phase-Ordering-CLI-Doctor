@@ -64,6 +64,12 @@ jobs:
             if [ -d "/usr/lib/llvm-$ver/bin" ]; then
               echo "/usr/lib/llvm-$ver/bin" >> $GITHUB_PATH
             fi
+            if [ -f "/usr/bin/opt-$ver" ] && ! which opt >/dev/null 2>&1; then
+              sudo ln -sf "/usr/bin/opt-$ver" /usr/local/bin/opt
+            fi
+            if [ -f "/usr/bin/clang-$ver" ] && ! which clang >/dev/null 2>&1; then
+              sudo ln -sf "/usr/bin/clang-$ver" /usr/local/bin/clang
+            fi
           done
 
       - name: Install LLVM / Clang (macOS)

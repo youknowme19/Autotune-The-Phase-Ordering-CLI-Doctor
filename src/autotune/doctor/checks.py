@@ -98,6 +98,14 @@ def find_tool(
     if which_path:
         return which_path
 
+    # Search versioned toolchain binaries (e.g. clang-18, opt-18, clang-17, opt-17)
+    for ver in [19, 18, 17, 16, 15, 14]:
+        v_which = shutil.which(f"{tool_name}-{ver}")
+        if v_which:
+            return v_which
+        if os.path.exists(f"/usr/bin/{tool_name}-{ver}") and os.access(f"/usr/bin/{tool_name}-{ver}", os.X_OK):
+            return f"/usr/bin/{tool_name}-{ver}"
+
     if os.path.exists(f"/usr/bin/{tool_name}") and os.access(f"/usr/bin/{tool_name}", os.X_OK):
         return f"/usr/bin/{tool_name}"
 
