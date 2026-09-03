@@ -18,15 +18,17 @@ def test_cli_doctor():
 
 
 def test_cli_version():
+    from autotune import __version__
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "autotune 0.3.0" in result.stdout
+    assert f"autotune {__version__}" in result.stdout
 
 
 def test_cli_version_short_flag():
+    from autotune import __version__
     result = runner.invoke(app, ["-V"])
     assert result.exit_code == 0
-    assert "autotune 0.3.0" in result.stdout
+    assert f"autotune {__version__}" in result.stdout
 
 
 def test_cli_diagnose():
