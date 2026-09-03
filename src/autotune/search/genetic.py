@@ -467,8 +467,11 @@ class GeneticAlgorithmEngine:
                         origin=getattr(e, "origin", "elite"),
                     ))
 
+                # Adaptive simulated annealing schedule: broad exploration early, fine exploitation late
+                annealing_temp = max(0.2, 1.0 - (gen / max(1, self.generations)) * 0.7)
                 unique_ratio = len({self.get_sequence_hash(ind.sequence) for ind in pop.individuals}) / self.population_size
-                effective_mutation_rate = self.mutation_rate * (1.5 if unique_ratio < 0.5 else 1.0)
+                diversity_boost = 1.5 if unique_ratio < 0.5 else 1.0
+                effective_mutation_rate = max(0.05, min(0.95, self.mutation_rate * annealing_temp * diversity_boost))
 
                 seen_hashes: Set[str] = {self.get_sequence_hash(e.sequence) for e in elites}
                 while len(new_individuals) < self.population_size:
