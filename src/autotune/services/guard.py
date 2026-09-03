@@ -61,7 +61,10 @@ class GuardService:
         runs: int = 15,
         warmup: int = 3,
         strict_env: bool = False,
+        min_samples: int = 10,
     ) -> GuardResult:
+        if runs < min_samples:
+            runs = min_samples
         if not os.path.exists(source):
             return GuardResult(
                 exit_code=GuardExitCode.INFRASTRUCTURE_ERROR,

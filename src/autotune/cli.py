@@ -337,6 +337,7 @@ def guard(
     runs: int = typer.Option(15, "--runs", help="Benchmark repetitions"),
     warmup: int = typer.Option(3, "--warmup", help="Warmup repetitions"),
     strict_env: bool = typer.Option(False, "--strict-env", help="Enforce identical CPU architecture and toolchain"),
+    min_samples: int = typer.Option(10, "--min-samples", help="Minimum required samples for statistical significance"),
     ci: bool = typer.Option(False, "--ci", help="CI machine-readable mode"),
     comment_markdown: Optional[str] = typer.Option(None, "--comment-markdown", help="Export GitHub PR Markdown summary comment to specified file"),
 ):
@@ -349,6 +350,7 @@ def guard(
         runs=runs,
         warmup=warmup,
         strict_env=strict_env,
+        min_samples=min_samples,
     )
 
     if comment_markdown:
