@@ -31,6 +31,8 @@ class WorkloadProfile(BaseModel):
     compute_intensity: float
     has_arrays_or_pointers: bool
     has_math_lib: bool
+    cyclomatic_complexity: int = 1
+    branch_count: int = 0
     recommended_passes: List[str] = Field(default_factory=list)
 
 
@@ -82,6 +84,10 @@ class WorkloadProfiler:
             if p not in unique_recs:
                 unique_recs.append(p)
 
+        # Compute Cyclomatic Complexity: M = E - N + 2P ≈ Decision Points + 1
+        decision_points = summary.loop_count + getattr(summary, "branch_count", 0)
+        cyclomatic_complexity = max(1, decision_points + 1)
+
         return WorkloadProfile(
             source_hash=src_hash,
             source_filename=os.path.basename(source_path),
@@ -101,5 +107,7 @@ class WorkloadProfiler:
             compute_intensity=summary.estimated_compute_intensity,
             has_arrays_or_pointers=summary.has_arrays_or_pointers,
             has_math_lib=summary.has_math_lib,
+            cyclomatic_complexity=cyclomatic_complexity,
+            branch_count=decision_points,
             recommended_passes=unique_recs,
         )
