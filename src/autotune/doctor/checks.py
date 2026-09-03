@@ -43,7 +43,7 @@ class DoctorReport(BaseModel):
 
 
 def check_system_environment_warnings() -> List[str]:
-    """Detect potential benchmark measurement noise sources (CPU load, thermal, etc.)."""
+    """Detect potential benchmark measurement noise sources (CPU load, thermal, power mode, memory)."""
     env_warnings: List[str] = []
     try:
         if hasattr(os, "getloadavg"):
@@ -56,6 +56,18 @@ def check_system_environment_warnings() -> List[str]:
                 )
     except Exception:
         pass
+
+    # Check for battery power state on macOS if pmset is available
+    if platform.system() == "Darwin":
+        try:
+            res = subprocess.run(["pmset", "-g", "batt"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=2)
+            if res.returncode == 0 and "Battery Power" in res.stdout:
+                env_warnings.append(
+                    "System is currently running on Battery Power. CPU frequency scaling and dynamic throttling may induce benchmark variance. AC power recommended."
+                )
+        except Exception:
+            pass
+
     return env_warnings
 
 
