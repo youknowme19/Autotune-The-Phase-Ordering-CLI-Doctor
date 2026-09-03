@@ -392,14 +392,28 @@ def guard(
 
 @app.command()
 def history(
-    source: Optional[str] = typer.Argument(None, help="Optional source filename or hash to filter history"),
-    limit: int = typer.Option(20, "--limit", "-n", help="Maximum entries to display"),
+    source: Optional[str] = typer.Option(None, "--source", "-s", help="Filter history by source kernel filename"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Maximum historical entries to display"),
     json_output: bool = typer.Option(False, "--json", help="Output history in JSON format"),
+    markdown_output: bool = typer.Option(False, "--markdown", "-m", help="Output history as GitHub Flavored Markdown table"),
 ):
-    """Display past experiment history and optimization records from .autotune/history/."""
+    """Query and inspect past Autotune optimization experiments and empirical evidence."""
     entries = HistoryManager.list_history(source_filter=source, limit=limit)
     if json_output:
         console.print(json.dumps([e.model_dump() for e in entries], indent=2))
+        return
+
+    if markdown_output:
+        md_lines = [
+            "### 📜 Autotune Optimization History",
+            "",
+            "| Run ID | Date | Workload | Speedup | Grade | Status | Winning Pass Pipeline |",
+            "| :--- | :--- | :--- | :--- | :---: | :--- | :--- |",
+        ]
+        for e in entries:
+            pipe_str = " → ".join(e.winning_passes) if e.winning_passes else "Baseline (-O3)"
+            md_lines.append(f"| `{e.run_id[:8]}` | {e.timestamp[:10]} | `{e.source_filename}` | **`{e.speedup_ratio:.2f}×`** | Grade {e.evidence_grade} | `{e.classification}` | `{pipe_str}` |")
+        console.print("\n".join(md_lines))
         return
 
     if not entries:
