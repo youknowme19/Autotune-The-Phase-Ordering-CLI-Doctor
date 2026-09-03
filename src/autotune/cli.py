@@ -1590,6 +1590,55 @@ def show_version(
     console.print(table)
 
 
+@app.command(name="diff")
+def diff_reports(
+    report_a: str = typer.Argument(..., help="Path to first report JSON"),
+    report_b: str = typer.Argument(..., help="Path to second report JSON"),
+):
+    """Compare and diff two optimization search reports side-by-side."""
+    if not os.path.exists(report_a):
+        console.print(f"[bold red]Report A not found: {report_a}[/bold red]")
+        raise typer.Exit(code=1)
+    if not os.path.exists(report_b):
+        console.print(f"[bold red]Report B not found: {report_b}[/bold red]")
+        raise typer.Exit(code=1)
+
+    with open(report_a, "r", encoding="utf-8") as f:
+        ra = json.load(f)
+    with open(report_b, "r", encoding="utf-8") as f:
+        rb = json.load(f)
+
+    pa = ra.get("prescription", {})
+    pb = rb.get("prescription", {})
+    eva = ra.get("evidence_score", {})
+    evb = rb.get("evidence_score", {})
+
+    table = Table(title="Autotune Side-by-Side Experiment Diff", border_style="cyan")
+    table.add_column("Metric / Property", style="bold white")
+    table.add_column(f"Report A ({os.path.basename(report_a)})", style="yellow")
+    table.add_column(f"Report B ({os.path.basename(report_b)})", style="green")
+    table.add_column("Delta", style="bold magenta")
+
+    sa = ra.get("confirmed_speedup", pa.get("speedup_ratio", 1.0))
+    sb = rb.get("confirmed_speedup", pb.get("speedup_ratio", 1.0))
+    table.add_row("Speedup Ratio", f"{sa:.2f}×", f"{sb:.2f}×", f"{sb - sa:+.2f}×")
+
+    b_time_a = pa.get("baseline_time_ms", 0.0)
+    b_time_b = pb.get("baseline_time_ms", 0.0)
+    c_time_a = pa.get("candidate_time_ms", 0.0)
+    c_time_b = pb.get("candidate_time_ms", 0.0)
+    table.add_row("Baseline Time (ms)", f"{b_time_a:.3f}", f"{b_time_b:.3f}", f"{b_time_b - b_time_a:+.3f}")
+    table.add_row("Candidate Time (ms)", f"{c_time_a:.3f}", f"{c_time_b:.3f}", f"{c_time_b - c_time_a:+.3f}")
+    table.add_row("Evidence Grade", f"Grade {pa.get('evidence_grade', 'N/A')}", f"Grade {pb.get('evidence_grade', 'N/A')}", "—")
+    table.add_row("Classification", pa.get("classification", "N/A"), pb.get("classification", "N/A"), "—")
+
+    pipe_a = " → ".join(pa.get("pass_sequence", {}).get("passes", []))
+    pipe_b = " → ".join(pb.get("pass_sequence", {}).get("passes", []))
+    table.add_row("Pass Pipeline", pipe_a, pipe_b, "Identical" if pipe_a == pipe_b else "Different")
+
+    console.print(table)
+
+
 def main():
     app()
 
