@@ -330,3 +330,37 @@ class PersistentCacheManager:
                     os.remove(p)
                 except Exception:
                     pass
+
+    def enforce_lru_quota(self, max_size_bytes: int = 500 * 1024 * 1024) -> int:
+        """Evicts oldest compilation and performance artifacts if cache size exceeds quota."""
+        if not os.path.exists(self.cache_dir):
+            return 0
+
+        all_files = []
+        total_size = 0
+
+        for root, _, files in os.walk(self.cache_dir):
+            for f in files:
+                fpath = os.path.join(root, f)
+                try:
+                    stat = os.stat(fpath)
+                    all_files.append((stat.st_mtime, stat.st_size, fpath))
+                    total_size += stat.st_size
+                except Exception:
+                    pass
+
+        evicted_count = 0
+        if total_size > max_size_bytes:
+            # Sort by access/modification time ascending (oldest first)
+            all_files.sort(key=lambda x: x[0])
+            for _, size, fpath in all_files:
+                if total_size <= max_size_bytes:
+                    break
+                try:
+                    os.remove(fpath)
+                    total_size -= size
+                    evicted_count += 1
+                except Exception:
+                    pass
+
+        return evicted_count
