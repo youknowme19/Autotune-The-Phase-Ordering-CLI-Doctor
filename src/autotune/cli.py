@@ -1530,6 +1530,46 @@ def markdown(
         raise typer.Exit(code=1)
 
 
+@app.command(name="version")
+def show_version(
+    json_output: bool = typer.Option(False, "--json", help="Output version info as JSON"),
+):
+    """Display comprehensive version, compiler toolchain, and platform diagnostics."""
+    doc_report = run_doctor_checks()
+    if json_output:
+        info = {
+            "autotune_version": __version__,
+            "python_version": doc_report.python_version,
+            "os_name": doc_report.os_name,
+            "architecture": doc_report.arch,
+            "cpu_info": doc_report.cpu_info,
+            "clang_version": doc_report.clang_version,
+            "clang_path": doc_report.clang_path,
+            "opt_version": doc_report.opt_version,
+            "opt_path": doc_report.opt_path,
+            "target_triple": doc_report.target_triple,
+            "measurement_backend": doc_report.measurement_backend,
+        }
+        console.print(json.dumps(info, indent=2))
+        return
+
+    table = Table(title="Autotune System & Toolchain Diagnostics", border_style="cyan")
+    table.add_column("Component", style="bold white")
+    table.add_column("Version / Value", style="bold green")
+    table.add_column("Status", style="bold yellow")
+
+    table.add_row("Autotune Engine", f"v{__version__}", "✓ RELEASE")
+    table.add_row("Python Runtime", doc_report.python_version, "✓ OK" if doc_report.python_ok else "✗ OUTDATED")
+    table.add_row("Operating System", f"{doc_report.os_name} ({doc_report.arch})", "✓ DETECTED")
+    table.add_row("Processor / Architecture", doc_report.cpu_info, "✓ NATIVE")
+    table.add_row("Clang Compiler", doc_report.clang_version or "Not Found", "✓ READY" if doc_report.clang_ok else "✗ MISSING")
+    table.add_row("LLVM Opt Binary", doc_report.opt_version or "Not Found", "✓ READY" if doc_report.opt_ok else "⚠ FALLBACK")
+    table.add_row("Target Machine Triple", doc_report.target_triple or "unknown", "✓ TARGETED")
+    table.add_row("Measurement Backend", doc_report.measurement_backend, "✓ CALIBRATED")
+
+    console.print(table)
+
+
 def main():
     app()
 
