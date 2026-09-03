@@ -149,3 +149,40 @@ autotune export report.json --format ninja -o build.ninja
 # Export Meson build definition
 autotune export report.json --format meson -o meson.build
 ```
+
+---
+
+## Recipe 9: Integrating with Google Bazel
+
+Export native `genrule` definitions directly for monorepos using Bazel:
+
+```bash
+autotune export report.json --format bazel -o BUILD.bazel
+```
+
+Build the optimized target hermetically with Bazel:
+```bash
+bazel build //:kernel_opt_bin
+```
+
+---
+
+## Recipe 10: Hermetic Docker Container Benchmarking
+
+Generate a reproducible Dockerfile for containerized cloud benchmarking:
+
+```bash
+autotune export report.json --format docker -o Dockerfile
+docker build -t autotune-benchmark .
+docker run --rm autotune-benchmark
+```
+
+---
+
+## Recipe 11: Side-by-Side Experiment Report Diffing
+
+When evaluating two different compiler versions or optimization presets, compare results directly:
+
+```bash
+autotune diff run_quick_report.json run_aggressive_report.json
+```
