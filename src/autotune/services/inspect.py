@@ -27,6 +27,7 @@ class InspectionResult(BaseModel):
     vector_instruction_gain: int = 0
     instruction_count_delta: int = 0
     cfg_diagram: str = ""
+    dot_cfg: str = ""
     basic_blocks_count: int = 0
 
 
@@ -74,64 +75,59 @@ class InspectService:
             # Emit baseline IR & Assembly
             compiler.emit_llvm_ir(source, base_ir)
             compiler.emit_assembly(source, base_asm, opt_level="-O3")
+            b_metrics = compiler.analyze_assembly(base_asm)
 
             # Emit candidate IR & Assembly
             seq = PassSequence(passes=passes)
             compiler.emit_llvm_ir(source, cand_ir, pass_sequence=seq)
             compiler.emit_assembly(source, cand_asm, pass_sequence=seq)
-
-            # Analyze assembly
-            b_metrics = compiler.analyze_assembly(base_asm)
             c_metrics = compiler.analyze_assembly(cand_asm)
 
             # Read previews
-            b_ir_text = ""
+            b_preview = ""
             if os.path.exists(base_ir):
                 with open(base_ir, "r", encoding="utf-8", errors="ignore") as f:
-                    b_ir_text = f.read()
+                    b_preview = f.read()
 
-            c_ir_text = ""
+            c_preview = ""
             if os.path.exists(cand_ir):
                 with open(cand_ir, "r", encoding="utf-8", errors="ignore") as f:
-                    c_ir_text = f.read()
+                    c_preview = f.read()
 
-            # Generate unified diff of first 100 lines
+            # Structural IR Unified Diff
             diff_lines = list(difflib.unified_diff(
-                b_ir_text.splitlines()[:150],
-                c_ir_text.splitlines()[:150],
+                b_preview.splitlines(keepends=True)[:150],
+                c_preview.splitlines(keepends=True)[:150],
                 fromfile="-O3 Baseline LLVM IR",
                 tofile="Autotune Optimized LLVM IR",
-                lineterm="",
+                n=3,
             ))
-            diff_str = "\n".join(diff_lines[:40]) if diff_lines else "No textual differences in first 150 lines of IR."
+            diff_str = "".join(diff_lines) if diff_lines else "No textual differences detected in preview IR."
 
-            b_preview = "\n".join(b_ir_text.splitlines()[:25])
-            c_preview = "\n".join(c_ir_text.splitlines()[:25])
-
-            instr_delta = c_metrics.total_instructions - b_metrics.total_instructions
             vec_gain = c_metrics.vector_instructions - b_metrics.vector_instructions
-
-            cfg_art, bb_count = InspectService._build_cfg_ascii(c_ir_text)
+            instr_delta = c_metrics.total_instructions - b_metrics.total_instructions
+            cfg_art, bb_count = InspectService._build_cfg_ascii(c_preview)
+            dot_graph = InspectService._build_cfg_dot(c_preview)
 
             return InspectionResult(
                 source_path=source,
                 pass_sequence=passes,
-                raw_ir_preview="",
-                baseline_ir_preview=b_preview,
-                candidate_ir_preview=c_preview,
+                raw_ir_preview=b_preview[:1500],
+                baseline_ir_preview=b_preview[:1500],
+                candidate_ir_preview=c_preview[:1500],
                 ir_diff_preview=diff_str,
                 baseline_assembly_metrics=b_metrics,
                 candidate_assembly_metrics=c_metrics,
                 vector_instruction_gain=vec_gain,
                 instruction_count_delta=instr_delta,
                 cfg_diagram=cfg_art,
+                dot_cfg=dot_graph,
                 basic_blocks_count=bb_count,
             )
 
     @staticmethod
     def _build_cfg_ascii(llvm_ir: str) -> tuple[str, int]:
         """Generates an ASCII Control Flow Graph (CFG) from LLVM IR basic blocks."""
-        import re
         blocks = []
         current_label = "entry"
         current_instrs = 0
@@ -165,3 +161,36 @@ class InspectService:
             cfg_lines.append(f"  ... ({len(blocks) - 8} more basic blocks)")
 
         return ("\n".join(cfg_lines), len(blocks))
+
+    @staticmethod
+    def _build_cfg_dot(llvm_ir: str) -> str:
+        """Generates Graphviz DOT representation of basic block control flow."""
+        blocks = []
+        current_label = "entry"
+        current_instrs = 0
+
+        for line in llvm_ir.splitlines():
+            line_str = line.strip()
+            if not line_str or line_str.startswith(";"):
+                continue
+            if line_str.endswith(":") and not line_str.startswith(" "):
+                if current_instrs > 0:
+                    blocks.append((current_label, current_instrs))
+                current_label = line_str[:-1]
+                current_instrs = 0
+            else:
+                current_instrs += 1
+
+        if current_instrs > 0:
+            blocks.append((current_label, current_instrs))
+
+        dot_lines = ["digraph CFG {", '  node [shape=box, style=rounded, fontname="Courier"];']
+        for label, count in blocks:
+            safe_label = label.replace('"', '\\"')
+            dot_lines.append(f'  "{safe_label}" [label="{safe_label}\\n({count} instructions)"];')
+
+        for i in range(len(blocks) - 1):
+            dot_lines.append(f'  "{blocks[i][0]}" -> "{blocks[i+1][0]}";')
+
+        dot_lines.append("}")
+        return "\n".join(dot_lines)
