@@ -22,7 +22,7 @@ def test_apply_report_generates_artifacts():
             "source_path": os.path.abspath(src),
             "run_id": "test_run_123",
             "prescription": {
-                "pass_sequence": {"passes": ["sccp", "gvn", "mem2reg", "lower-atomic", "mem2reg"]},
+                "pass_sequence": {"passes": ["sccp", "gvn", "mem2reg", "instcombine", "mem2reg"]},
                 "reproducible_clang_command": "clang ...",
             },
         }

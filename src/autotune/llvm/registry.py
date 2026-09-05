@@ -41,6 +41,7 @@ KNOWN_PASS_CLASSIFICATIONS: Dict[str, PassType] = {
     "correlated-propagation": PassType.FUNCTION,
     "lower-expect": PassType.FUNCTION,
     "lower-atomic": PassType.FUNCTION,
+    "loweratomic": PassType.FUNCTION,
     "tailcallelim": PassType.FUNCTION,
     "loop-rotate": PassType.FUNCTION,
     "loop-unroll": PassType.FUNCTION,

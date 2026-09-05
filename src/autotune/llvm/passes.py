@@ -49,6 +49,7 @@ KNOWN_VALID_PASSES: Set[str] = {
     "loop-simplify",
     "memcpyopt",
     "lower-atomic",
+    "loweratomic",
     "gvn-hoist",
     "gvn-sink",
 }

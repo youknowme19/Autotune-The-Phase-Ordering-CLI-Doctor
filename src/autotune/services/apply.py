@@ -88,7 +88,11 @@ class ApplyService:
                 cmd_opt = [opt_bin, f"-passes={passes_str}", raw_ir, "-S", "-o", opt_ir]
             else:
                 cmd_opt = [opt_bin, "-passes=default<O3>", raw_ir, "-S", "-o", opt_ir]
-            subprocess.check_call(cmd_opt)
+            res_opt = subprocess.run(cmd_opt, capture_output=True, text=True)
+            if res_opt.returncode != 0:
+                raise RuntimeError(
+                    f"LLVM opt pipeline failed with exit code {res_opt.returncode}: {res_opt.stderr.strip() or res_opt.stdout.strip()}"
+                )
 
             # 3. Emit assembly from optimized IR
             compiler.emit_assembly(source_path, asm_out, pass_sequence=seq if passes else None)
