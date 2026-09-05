@@ -97,18 +97,23 @@ class SeedArchiveManager:
     def get_target_microarch_bias(target_cpu: Optional[str] = None) -> List[List[str]]:
         """Returns microarchitecture-tailored seed pipelines for specific hardware targets."""
         cpu = (target_cpu or "").lower()
-        if "apple" in cpu or "m1" in cpu or "m2" in cpu or "m3" in cpu or "arm" in cpu:
+        if "apple" in cpu or "m1" in cpu or "m2" in cpu or "m3" in cpu or "arm" in cpu or "darwin" in cpu:
             # Apple Silicon / ARM64 NEON & SIMD pipelining
             return [
-                ["mem2reg", "sroa", "loop-rotate", "licm", "loop-vectorize", "slp-vectorize", "instcombine"],
+                ["mem2reg", "sroa", "loop-rotate", "licm", "loop-unroll", "loop-vectorize", "slp-vectorizer", "instcombine", "early-cse", "gvn", "dce"],
+                ["mem2reg", "sroa", "loop-rotate", "licm", "loop-vectorize", "slp-vectorizer", "instcombine"],
+                ["mem2reg", "sroa", "loop-flatten", "loop-rotate", "licm", "loop-unroll", "loop-vectorize", "aggressive-instcombine"],
                 ["sccp", "gvn", "mem2reg", "lower-atomic", "loop-unroll", "instcombine"],
             ]
         elif "znver" in cpu or "amd" in cpu or "avx2" in cpu or "x86" in cpu:
             # x86-64 AVX2 / AVX-512 vector pipelines
             return [
+                ["mem2reg", "sroa", "loop-rotate", "licm", "loop-unroll", "loop-vectorize", "slp-vectorizer", "instcombine", "early-cse", "gvn"],
                 ["mem2reg", "early-cse", "reassociate", "loop-vectorize", "instcombine", "dce"],
-                ["sroa", "gvn", "loop-rotate", "licm", "loop-unroll", "instcombine"],
+                ["sroa", "gvn", "loop-rotate", "licm", "loop-unroll", "instcombine", "aggressive-instcombine"],
             ]
         return [
+            ["mem2reg", "sroa", "loop-rotate", "licm", "loop-unroll", "loop-vectorize", "slp-vectorizer", "instcombine"],
             ["mem2reg", "instcombine", "loop-rotate", "loop-vectorize", "simplifycfg"],
         ]
+

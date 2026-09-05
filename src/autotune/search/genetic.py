@@ -135,13 +135,19 @@ class GeneticAlgorithmEngine:
         for hs in hist_seeds:
             hybrid_pool.append(PassSequence(passes=hs))
 
+        # Hardware-biased microarchitecture pipelines (NEON / AVX / Loop Vectorization)
+        bias_seeds = SeedArchiveManager.get_target_microarch_bias(arch)
+        for bs in bias_seeds:
+            hybrid_pool.append(PassSequence(passes=bs))
+
         # Known generic LLVM optimization patterns
         hybrid_pool.extend([
+            PassSequence(passes=["mem2reg", "sroa", "loop-rotate", "licm", "loop-unroll", "loop-vectorize", "slp-vectorizer", "instcombine"]),
             PassSequence(passes=["mem2reg", "instcombine", "gvn"]),
             PassSequence(passes=["mem2reg", "sroa", "loop-rotate", "instcombine"]),
             PassSequence(passes=["reassociate", "inline", "mem2reg", "instcombine", "loop-simplify", "indvars"]),
             PassSequence(passes=["mem2reg", "sccp", "dce", "memcpyopt", "gvn"]),
-            PassSequence(passes=["canon-freeze", "mem2reg", "loop-reduce", "inline"]),
+            PassSequence(passes=["mem2reg", "sroa", "loop-flatten", "loop-rotate", "licm", "loop-unroll", "loop-vectorize", "aggressive-instcombine"]),
         ])
 
         for seq in hybrid_pool:
