@@ -83,7 +83,7 @@ class ApplyService:
             # 2. Run opt pass pipeline to produce optimized LLVM IR
             seq = PassSequence(passes=passes)
             opt_bin = doc.opt_path or "opt"
-            passes_str = seq.to_opt_pipeline() if hasattr(seq, "to_opt_pipeline") else ",".join(passes)
+            passes_str = seq.to_opt_string() if passes else ""
             if passes_str:
                 cmd_opt = [opt_bin, f"-passes={passes_str}", raw_ir, "-S", "-o", opt_ir]
             else:

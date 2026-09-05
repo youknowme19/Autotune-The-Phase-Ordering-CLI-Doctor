@@ -91,6 +91,10 @@ class PassSequence(BaseModel):
         registry = LLVMPassRegistry()
         return registry.construct_npm_pipeline_string(self)
 
+    def to_opt_pipeline(self) -> str:
+        """Alias for to_opt_string."""
+        return self.to_opt_string()
+
     def to_canonical_opt_string(self) -> str:
         """Format canonicalized pass sequence string."""
         canonical_seq = CanonicalPassNormalizer.canonicalize_sequence(self)

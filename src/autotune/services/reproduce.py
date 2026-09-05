@@ -228,7 +228,7 @@ class ReproduceService:
             base_delta_pct = ((base_ms - recorded_base_ms) / recorded_base_ms * 100.0) if recorded_base_ms > 0 else 0.0
             cand_delta_pct = ((cand_ms - recorded_cand_ms) / recorded_cand_ms * 100.0) if recorded_cand_ms > 0 else 0.0
 
-            # Check for high environment timing noise
+            # Check for high environment timing noise or major cross-environment baseline shift
             cand_stability = StabilityAnalyzer.analyze(cand_bench.metrics.samples_ns)
             if cand_stability.cv > 0.20:
                 verdict = ReproductionVerdict.INCONCLUSIVE
@@ -237,6 +237,11 @@ class ReproduceService:
                 verdict = ReproductionVerdict.REPRODUCED
                 reasons.append(
                     f"Observed speedup {observed_speedup:.2f}x is within expected measurement tolerance ({speedup_delta_pct:.1f}% delta vs {recorded_speedup:.2f}x)."
+                )
+            elif abs(base_delta_pct) > 50.0:
+                verdict = ReproductionVerdict.INCONCLUSIVE
+                reasons.append(
+                    f"Significant environment baseline divergence detected ({base_delta_pct:+.1f}% vs recorded baseline). Hardware calibration differs; results inconclusive."
                 )
             else:
                 verdict = ReproductionVerdict.NOT_REPRODUCED
