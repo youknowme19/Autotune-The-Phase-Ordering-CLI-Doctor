@@ -1,6 +1,6 @@
 name: "Autotune Performance Guard Action"
 description: "Automatically optimize and guard C/C++ workloads against performance regressions in CI"
-author: "Autotune Contributors"
+author: "youknowme19"
 branding:
   icon: "zap"
   color: "blue"
@@ -32,7 +32,7 @@ runs:
     - name: Install Autotune
       shell: bash
       run: |
-        pip install autotune-doctor
+        pip install autotune-doctor || pip install git+https://github.com/youknowme19/Autotune-The-Phase-Ordering-CLI-Doctor.git@main
 
     - name: Run Autotune Guard
       shell: bash
