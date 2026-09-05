@@ -29,24 +29,31 @@ class ValidateService:
     """Runs validation campaigns over curated C benchmark workloads."""
 
     @staticmethod
-    def run_validation(quick: bool = True) -> ValidationResult:
-        examples = [
-            "examples/matrix/matrix_mul.c",
-            "examples/vector/vector_add.c",
-            "examples/loop/loop_reduction.c",
-            "examples/memory/stencil_2d.c",
-            "examples/branch/binary_search.c",
-        ]
+    def run_validation(quick: bool = True, baseline: str = "-O3") -> ValidationResult:
+        if quick:
+            examples = [
+                "examples/matrix/matrix_mul.c",
+                "examples/vector/vector_add.c",
+            ]
+            budget = 2
+        else:
+            examples = [
+                "examples/matrix_transpose/kernel.c",
+                "examples/conv2d/kernel.c",
+                "polybench/gemm.c",
+                "examples/nbody/kernel.c",
+                "examples/matrix/matrix_mul.c",
+            ]
+            budget = 10
 
         items = []
-        budget = 5 if quick else 15
 
         for ex in examples:
             if not os.path.exists(ex):
                 continue
 
             try:
-                opt_res = OptimizeService.run(source=ex, time_budget=budget, quiet=True)
+                opt_res = OptimizeService.run(source=ex, baseline_opt=baseline, time_budget=budget, quiet=True)
                 items.append(
                     ValidationItem(
                         workload=os.path.basename(ex),

@@ -102,6 +102,7 @@ def main(
 def doctor(
     source: Optional[str] = typer.Argument(None, help="Path to C/C++ source kernel file (orchestrates full optimization when provided)"),
     preset: str = typer.Option("balanced", "--preset", "-p", help="Optimization preset [quick|balanced|aggressive]"),
+    baseline: str = typer.Option("-O3", "--baseline", "-b", help="Baseline compiler optimization level [-O0|-O1|-O2|-O3|-Os|-Oz]"),
     generations: Optional[int] = typer.Option(None, "--generations", "-g", help="GA generation count override"),
     population: Optional[int] = typer.Option(None, "--population", help="GA population size override"),
     seed: int = typer.Option(42, "--seed", "-s", help="Random seed for deterministic search"),
@@ -158,6 +159,7 @@ def doctor(
             workload=workload,
             args=args,
             preset=preset,
+            baseline_opt=baseline,
             population=population,
             generations=generations,
             seed=seed,
@@ -195,7 +197,8 @@ def doctor(
             else:
                 console.print(f"\n[bold yellow]ℹ BASELINE EVALUATION COMPLETE[/bold yellow]")
 
-            console.print(f"  - Baseline (-O3):  [bold white]{res.baseline_median_ms:.3f} ms[/bold white]")
+            b_opt = getattr(res, "baseline_opt", "-O3")
+            console.print(f"  - Baseline ({b_opt}):  [bold white]{res.baseline_median_ms:.3f} ms[/bold white]")
             console.print(f"  - Autotune Winner: [bold green]{res.candidate_median_ms:.3f} ms[/bold green]")
             console.print(f"  - Confirmed Gain:  [bold yellow]{res.confirmed_speedup:.2f}×[/bold yellow] (Grade {res.evidence_grade} — {res.classification})")
             console.print(f"  - Correctness:     [bold green]✓ {res.correctness_status}[/bold green]")
@@ -1290,6 +1293,7 @@ def report(
 @app.command()
 def optimize(
     source: str = typer.Argument(..., help="Path to C/C++ source file to optimize"),
+    baseline: str = typer.Option("-O3", "--baseline", "-b", help="Baseline compiler optimization level [-O0|-O1|-O2|-O3|-Os|-Oz]"),
     workload: Optional[str] = typer.Option(None, "--workload", "-w", help="Optional stdin workload file path"),
     args: Optional[str] = typer.Option(None, "--args", help="Space-separated binary command-line arguments"),
     time_budget: int = typer.Option(30, "--time-budget", "-t", help="Search time budget limit in seconds"),
@@ -1304,6 +1308,7 @@ def optimize(
             source=source,
             workload=workload,
             args=args,
+            baseline_opt=baseline,
             time_budget=time_budget,
             seed=seed,
             output_dir=output_dir,
@@ -1329,13 +1334,14 @@ def optimize(
 @app.command()
 def validate(
     quick: bool = typer.Option(False, "--quick", help="Run fast validation harness with small search budgets"),
+    baseline: str = typer.Option("-O3", "--baseline", "-b", help="Baseline compiler optimization level [-O0|-O1|-O2|-O3|-Os|-Oz]"),
 ):
     """Validation Harness: Run curated example benchmarks and report empirical timing and speedup metrics."""
-    res = ValidateService.run_validation(quick=quick)
+    res = ValidateService.run_validation(quick=quick, baseline=baseline)
 
     table = Table(title="Autotune Curated Benchmark Validation Harness", border_style="cyan")
     table.add_column("Benchmark Workload", style="bold white")
-    table.add_column("Baseline (-O3)", style="yellow")
+    table.add_column(f"Baseline ({baseline})", style="yellow")
     table.add_column("Optimized", style="green")
     table.add_column("Speedup", style="bold magenta")
     table.add_column("CV %", style="dim")

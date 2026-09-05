@@ -29,6 +29,7 @@ class OptimizeResult(BaseModel):
 
     run_id: str
     source_path: str
+    baseline_opt: str = "-O3"
     speedup_ratio: float
     search_speedup: float = 1.0
     confirmed_speedup: float = 1.0
@@ -57,6 +58,7 @@ class OptimizeService:
         source: str,
         workload: Optional[str] = None,
         args: Optional[str] = None,
+        baseline_opt: str = "-O3",
         time_budget: int = 30,
         seed: int = 42,
         output_dir: Optional[str] = None,
@@ -87,7 +89,7 @@ class OptimizeService:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             base_bin = os.path.join(tmpdir, "baseline.bin")
-            compiler.compile_baseline(source, base_bin, opt_level="-O3")
+            compiler.compile_baseline(source, base_bin, opt_level=baseline_opt)
 
             executor = SandboxExecutor()
             base_exec = executor.execute(base_bin, workload_path=workload)
@@ -193,6 +195,7 @@ class OptimizeService:
             return OptimizeResult(
                 run_id=run_id,
                 source_path=source,
+                baseline_opt=baseline_opt,
                 speedup_ratio=prescription.speedup_ratio,
                 search_speedup=search_speedup,
                 confirmed_speedup=confirmed_speedup,

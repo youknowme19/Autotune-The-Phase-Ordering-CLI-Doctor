@@ -57,6 +57,7 @@ class DoctorResult(BaseModel):
     run_id: str
     source_path: str
     preset_used: str
+    baseline_opt: str = "-O3"
     search_mode: str
     speedup_ratio: float
     confirmed_speedup: float
@@ -87,6 +88,7 @@ class DoctorService:
         workload: Optional[str] = None,
         args: Optional[str] = None,
         preset: str = "balanced",
+        baseline_opt: str = "-O3",
         population: Optional[int] = None,
         generations: Optional[int] = None,
         seed: int = 42,
@@ -191,7 +193,7 @@ class DoctorService:
         with tempfile.TemporaryDirectory() as tmpdir:
             # 6. Baseline compilation & benchmark
             base_bin = os.path.join(tmpdir, "baseline.bin")
-            base_comp = compiler.compile_baseline(source, base_bin, opt_level="-O3")
+            base_comp = compiler.compile_baseline(source, base_bin, opt_level=baseline_opt)
             if not base_comp.success:
                 raise RuntimeError(f"Baseline compilation failed: {base_comp.error_message}")
 
@@ -425,6 +427,7 @@ class DoctorService:
                 run_id=run_id,
                 source_path=source,
                 preset_used=preset,
+                baseline_opt=baseline_opt,
                 search_mode=search_mode_str,
                 speedup_ratio=prescription.speedup_ratio,
                 confirmed_speedup=confirmed_speedup,
