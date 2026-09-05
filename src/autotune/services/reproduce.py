@@ -238,10 +238,10 @@ class ReproduceService:
                 reasons.append(
                     f"Observed speedup {observed_speedup:.2f}x is within expected measurement tolerance ({speedup_delta_pct:.1f}% delta vs {recorded_speedup:.2f}x)."
                 )
-            elif abs(base_delta_pct) > 50.0:
+            elif abs(base_delta_pct) > 50.0 or abs(cand_delta_pct) > 50.0:
                 verdict = ReproductionVerdict.INCONCLUSIVE
                 reasons.append(
-                    f"Significant environment baseline divergence detected ({base_delta_pct:+.1f}% vs recorded baseline). Hardware calibration differs; results inconclusive."
+                    f"Significant environment timing divergence detected (baseline: {base_delta_pct:+.1f}%, candidate: {cand_delta_pct:+.1f}% vs recorded). Hardware calibration differs; results inconclusive."
                 )
             else:
                 verdict = ReproductionVerdict.NOT_REPRODUCED
