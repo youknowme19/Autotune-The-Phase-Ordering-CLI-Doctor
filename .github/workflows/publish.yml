@@ -34,11 +34,37 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang llvm llvm-dev
+          for ver in 19 18 17 16 15 14; do
+            if [ -d "/usr/lib/llvm-$ver/bin" ]; then
+              echo "/usr/lib/llvm-$ver/bin" >> $GITHUB_PATH
+              export PATH="/usr/lib/llvm-$ver/bin:$PATH"
+            fi
+            if [ -f "/usr/bin/opt-$ver" ] && ! which opt >/dev/null 2>&1; then
+              sudo ln -sf "/usr/bin/opt-$ver" /usr/local/bin/opt
+            fi
+            if [ -f "/usr/bin/clang-$ver" ] && ! which clang >/dev/null 2>&1; then
+              sudo ln -sf "/usr/bin/clang-$ver" /usr/local/bin/clang
+            fi
+          done
 
       - name: Install LLVM / Clang (macOS)
         if: runner.os == 'macOS'
         run: |
-          which clang || brew install llvm
+          if [ -d "/opt/homebrew/opt/llvm/bin" ]; then
+            echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
+            export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
+          fi
+          if [ -d "/usr/local/opt/llvm/bin" ]; then
+            echo "/usr/local/opt/llvm/bin" >> $GITHUB_PATH
+            export PATH="/usr/local/opt/llvm/bin:$PATH"
+          fi
+          which opt || brew install llvm || true
+          if [ -d "/opt/homebrew/opt/llvm/bin" ]; then
+            echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
+          fi
+          if [ -d "/usr/local/opt/llvm/bin" ]; then
+            echo "/usr/local/opt/llvm/bin" >> $GITHUB_PATH
+          fi
 
       - name: Install package and test dependencies
         run: |
@@ -87,6 +113,7 @@ jobs:
           path: dist/
 
       - name: Publish package to PyPI
+        if: ${{ secrets.PYPI_API_TOKEN != '' }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
