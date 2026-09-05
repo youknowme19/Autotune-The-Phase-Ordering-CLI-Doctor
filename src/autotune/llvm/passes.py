@@ -12,14 +12,23 @@ KNOWN_VALID_PASSES: Set[str] = {
     "mem2reg",
     "gvn",
     "instcombine",
+    "aggressive-instcombine",
     "loop-rotate",
     "loop-unroll",
     "loop-vectorize",
     "slp-vectorize",
+    "slp-vectorizer",
+    "vector-combine",
+    "loop-flatten",
+    "loop-interchange",
+    "loop-unroll-and-jam",
+    "loop-distribute",
+    "loop-versioning",
     "licm",
     "simplifycfg",
     "dce",
     "adce",
+    "dse",
     "sccp",
     "ipsccp",
     "inline",
@@ -39,13 +48,17 @@ KNOWN_VALID_PASSES: Set[str] = {
     "indvars",
     "loop-simplify",
     "memcpyopt",
+    "lower-atomic",
+    "gvn-hoist",
+    "gvn-sink",
 }
 
 # Known explicit pass aliases with verified LLVM equivalence
 PASS_ALIASES: Dict[str, str] = {
     "scalarrepl": "sroa",
     "promote": "mem2reg",
-    "loweratomic": "loweratomic",
+    "loweratomic": "lower-atomic",
+    "slp-vectorize": "slp-vectorizer",
 }
 
 
